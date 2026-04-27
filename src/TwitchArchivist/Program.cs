@@ -17,6 +17,7 @@ builder.Services.AddRouting(options => options.LowercaseUrls = true);
 builder.Services.AddRazorPages();
 builder.Services.AddSingleton(new RecentLogStore(capacity: 500));
 builder.Services.AddSingleton<ILoggerProvider, RecentLogLoggerProvider>();
+builder.Services.AddSingleton<IFileSystemBrowserService, LocalFileSystemBrowserService>();
 builder.Services.AddHttpClient(nameof(TwitchAccessTokenProvider));
 builder.Services.AddHttpClient(nameof(TwitchHelixClient), client =>
 {
@@ -85,6 +86,42 @@ app.MapGet("/api/runtime-status", async (ITwitchAccessTokenProvider accessTokenP
         twitchUserAuthorizationLastValidatedUtc = runtimeStatusStore.TwitchUserAuthorizationLastValidatedUtc,
         updatedUtc = runtimeStatusStore.UpdatedUtc
     });
+});
+
+app.MapGet("/api/twitch/channels/search", async (string? query, ITwitchHelixClient twitchHelixClient, CancellationToken cancellationToken) =>
+{
+    var normalizedQuery = query?.Trim() ?? string.Empty;
+    if (normalizedQuery.Length < 4)
+    {
+        return Results.BadRequest(new
+        {
+            error = "Query must be at least 4 characters."
+        });
+    }
+
+    var results = await twitchHelixClient.SearchChannelsAsync(normalizedQuery, cancellationToken);
+    return Results.Ok(results);
+});
+
+app.MapGet("/api/filesystem/roots", async (IFileSystemBrowserService fileSystemBrowserService, CancellationToken cancellationToken) =>
+{
+    var roots = await fileSystemBrowserService.GetRootDirectoriesAsync(cancellationToken);
+    return Results.Ok(roots.Select(path => new FileSystemPathResponse(path)));
+});
+
+app.MapGet("/api/filesystem/directories", async (string? path, IFileSystemBrowserService fileSystemBrowserService, CancellationToken cancellationToken) =>
+{
+    var normalizedPath = path?.Trim() ?? string.Empty;
+    if (string.IsNullOrWhiteSpace(normalizedPath))
+    {
+        return Results.BadRequest(new
+        {
+            error = "A directory path is required."
+        });
+    }
+
+    var directories = await fileSystemBrowserService.GetSubdirectoriesAsync(normalizedPath, cancellationToken);
+    return Results.Ok(directories.Select(candidate => new FileSystemPathResponse(candidate)));
 });
 
 app.MapGet("/auth/twitch/start", (HttpContext httpContext, ITwitchAccessTokenProvider accessTokenProvider) =>
@@ -177,3 +214,5 @@ static string BuildTwitchOAuthRedirectUri(HttpRequest request)
 }
 
 public partial class Program;
+
+internal sealed record FileSystemPathResponse(string Path);

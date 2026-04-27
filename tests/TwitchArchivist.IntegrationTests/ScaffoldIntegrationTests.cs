@@ -8,7 +8,7 @@ public class ScaffoldIntegrationTests
     [Fact]
     public async Task HealthEndpointReturnsHealthyStatus()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new IntegrationTestWebApplicationFactory();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/healthz");
@@ -21,7 +21,7 @@ public class ScaffoldIntegrationTests
     [Fact]
     public async Task RootRouteRendersDashboardPage()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new IntegrationTestWebApplicationFactory();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/");
@@ -37,18 +37,17 @@ public class ScaffoldIntegrationTests
     [Fact]
     public async Task TwitchAuthorizationStartRouteUsesTheSameWebServerCallback()
     {
-        await using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
+        await using var factory = new IntegrationTestWebApplicationFactory(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, configurationBuilder) =>
             {
-                builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+                configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["Twitch:ClientId"] = "client-id",
-                        ["Twitch:ClientSecret"] = "client-secret"
-                    });
+                    ["Twitch:ClientId"] = "client-id",
+                    ["Twitch:ClientSecret"] = "client-secret"
                 });
             });
+        });
 
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -67,7 +66,7 @@ public class ScaffoldIntegrationTests
     [Fact]
     public async Task RuntimeStatusEndpointReturnsTwitchTokenValidityFields()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new IntegrationTestWebApplicationFactory();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/api/runtime-status");

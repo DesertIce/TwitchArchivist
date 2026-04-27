@@ -210,6 +210,21 @@
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         }
 
+        .input-with-button {
+            display: flex;
+            gap: 0.6rem;
+            align-items: stretch;
+        }
+
+        .input-with-button input[type=text] {
+            flex: 1 1 auto;
+        }
+
+        .input-with-button .button-ghost {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+
         .field-hint {
             margin: 0.35rem 0 0;
             font-size: 0.85rem;
@@ -374,6 +389,167 @@
         .field-validation-error {
             color: var(--danger-text);
             font-size: 0.85rem;
+        }
+
+        .field-hint.error {
+            color: var(--danger-text);
+        }
+
+        .portal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(3, 7, 18, 0.74);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 1100;
+        }
+
+        .portal-backdrop[hidden] {
+            display: none;
+        }
+
+        .portal-dialog {
+            width: min(720px, 100%);
+            max-height: min(82vh, 860px);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border-radius: 0.9rem;
+            background: var(--bg-panel-strong);
+            border: 1px solid var(--border-strong);
+            box-shadow: var(--shadow);
+        }
+
+        .portal-header,
+        .portal-footer {
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .portal-footer {
+            border-bottom: 0;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 0.75rem;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .portal-body {
+            padding: 1rem;
+            overflow: auto;
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .portal-toolbar {
+            display: flex;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .portal-path {
+            padding: 0.65rem 0.75rem;
+            border-radius: 0.5rem;
+            background: var(--bg-row);
+            border: 1px solid var(--border);
+            font-family: var(--mono-font);
+            word-break: break-all;
+        }
+
+        .portal-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            border-radius: 0.65rem;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--bg-row);
+        }
+
+        .portal-list[hidden] {
+            display: none;
+        }
+
+        .portal-list li + li {
+            border-top: 1px solid var(--border);
+        }
+
+        .portal-row {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: var(--text);
+            text-align: left;
+            padding: 0.75rem 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .portal-row:hover,
+        .portal-row:focus {
+            background: rgba(96, 165, 250, 0.12);
+            outline: none;
+        }
+
+        .portal-empty {
+            margin: 0;
+            color: var(--text-muted);
+        }
+
+        .autocomplete-list {
+            list-style: none;
+            margin: 0.45rem 0 0;
+            padding: 0;
+            border-radius: 0.6rem;
+            border: 1px solid var(--border);
+            background: #09101a;
+            overflow: hidden;
+        }
+
+        .autocomplete-list[hidden] {
+            display: none;
+        }
+
+        .autocomplete-list li + li {
+            border-top: 1px solid var(--border);
+        }
+
+        .autocomplete-option {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: var(--text);
+            text-align: left;
+            padding: 0.65rem 0.8rem;
+            cursor: pointer;
+        }
+
+        .autocomplete-option:hover,
+        .autocomplete-option:focus {
+            background: rgba(96, 165, 250, 0.12);
+            outline: none;
+        }
+
+        .autocomplete-primary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            font-weight: 600;
+        }
+
+        .autocomplete-secondary {
+            margin-top: 0.18rem;
+            font-size: 0.82rem;
+            color: var(--text-muted);
         }
 
         .log-text {
@@ -563,6 +739,28 @@
     <main>
         @RenderBody()
     </main>
+    <div class="portal-backdrop" data-directory-picker-portal="true" hidden>
+        <div class="portal-dialog" role="dialog" aria-modal="true" aria-labelledby="directory-picker-title">
+            <div class="portal-header">
+                <h3 id="directory-picker-title">Select output folder</h3>
+                <p class="field-hint">Browse the server-visible filesystem, or close this dialog and type the path manually.</p>
+            </div>
+            <div class="portal-body">
+                <div class="portal-toolbar">
+                    <button type="button" class="button-ghost" data-directory-picker-roots="true">Roots</button>
+                    <button type="button" class="button-ghost" data-directory-picker-up="true">Up</button>
+                </div>
+                <div class="portal-path" data-directory-picker-current-path="true"></div>
+                <p class="field-hint error" data-directory-picker-error="true" hidden></p>
+                <ul class="portal-list" data-directory-picker-list="true"></ul>
+                <p class="portal-empty" data-directory-picker-empty="true" hidden>No subfolders found for this location.</p>
+            </div>
+            <div class="portal-footer">
+                <button type="button" class="button-link" data-directory-picker-choose="true">Use this folder</button>
+                <button type="button" class="button-ghost" data-directory-picker-close="true">Close</button>
+            </div>
+        </div>
+    </div>
     <script>
         (() => {
             const setText = (id, value, fallback = "") => {
@@ -667,6 +865,281 @@
                 window.setInterval(refreshRuntimeStatus, 15000);
                 window.setInterval(tickRelative, 5000);
             }
+
+            const initDirectoryPickers = () => {
+                const portal = document.querySelector("[data-directory-picker-portal='true']");
+                const list = portal?.querySelector("[data-directory-picker-list='true']");
+                const rootsButton = portal?.querySelector("[data-directory-picker-roots='true']");
+                const upButton = portal?.querySelector("[data-directory-picker-up='true']");
+                const closeButton = portal?.querySelector("[data-directory-picker-close='true']");
+                const chooseButton = portal?.querySelector("[data-directory-picker-choose='true']");
+                const currentPathLabel = portal?.querySelector("[data-directory-picker-current-path='true']");
+                const errorLabel = portal?.querySelector("[data-directory-picker-error='true']");
+                const emptyLabel = portal?.querySelector("[data-directory-picker-empty='true']");
+                if (!(portal instanceof HTMLDivElement) ||
+                    !(list instanceof HTMLUListElement) ||
+                    !(rootsButton instanceof HTMLButtonElement) ||
+                    !(upButton instanceof HTMLButtonElement) ||
+                    !(closeButton instanceof HTMLButtonElement) ||
+                    !(chooseButton instanceof HTMLButtonElement) ||
+                    !(currentPathLabel instanceof HTMLDivElement) ||
+                    !(errorLabel instanceof HTMLParagraphElement) ||
+                    !(emptyLabel instanceof HTMLParagraphElement)) {
+                    return;
+                }
+
+                let activeInput = null;
+                let currentPath = "";
+
+                const setPortalError = message => {
+                    if (!message) {
+                        errorLabel.hidden = true;
+                        errorLabel.textContent = "";
+                        return;
+                    }
+
+                    errorLabel.hidden = false;
+                    errorLabel.textContent = message;
+                };
+
+                const setPortalPath = path => {
+                    currentPath = path ?? "";
+                    currentPathLabel.textContent = currentPath || "Choose a drive or root folder.";
+                };
+
+                const getParentPath = path => {
+                    if (!path) {
+                        return "";
+                    }
+
+                    const normalized = path.replace(/[\\/]+$/, "");
+                    const lastSeparatorIndex = Math.max(normalized.lastIndexOf("\\"), normalized.lastIndexOf("/"));
+                    if (lastSeparatorIndex < 0) {
+                        return "";
+                    }
+
+                    const parent = normalized.slice(0, lastSeparatorIndex + 1);
+                    if (!parent || parent === path) {
+                        return "";
+                    }
+
+                    return parent;
+                };
+
+                const renderList = paths => {
+                    list.innerHTML = "";
+                    emptyLabel.hidden = Array.isArray(paths) && paths.length > 0;
+
+                    for (const entry of paths ?? []) {
+                        const item = document.createElement("li");
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "portal-row";
+                        button.innerHTML = `<span class="mono">${entry.path}</span><span>Open</span>`;
+                        button.addEventListener("click", () => {
+                            loadDirectories(entry.path);
+                        });
+                        item.appendChild(button);
+                        list.appendChild(item);
+                    }
+                };
+
+                const loadRoots = async () => {
+                    setPortalError("");
+                    setPortalPath("");
+                    list.innerHTML = "";
+                    emptyLabel.hidden = true;
+
+                    try {
+                        const response = await fetch("/api/filesystem/roots", { cache: "no-store" });
+                        if (!response.ok) {
+                            setPortalError("Unable to load filesystem roots.");
+                            return;
+                        }
+
+                        const roots = await response.json();
+                        renderList(roots);
+                    } catch {
+                        setPortalError("Unable to load filesystem roots.");
+                    }
+                };
+
+                const loadDirectories = async path => {
+                    setPortalError("");
+                    setPortalPath(path);
+                    list.innerHTML = "";
+                    emptyLabel.hidden = true;
+
+                    try {
+                        const response = await fetch(`/api/filesystem/directories?path=${encodeURIComponent(path)}`, {
+                            cache: "no-store"
+                        });
+
+                        if (!response.ok) {
+                            const payload = await response.json().catch(() => null);
+                            setPortalError(payload?.error ?? "Unable to load subfolders.");
+                            return;
+                        }
+
+                        const directories = await response.json();
+                        renderList(directories);
+                    } catch {
+                        setPortalError("Unable to load subfolders.");
+                    }
+                };
+
+                const closePortal = () => {
+                    portal.hidden = true;
+                    activeInput = null;
+                    setPortalError("");
+                };
+
+                document.querySelectorAll("[data-directory-picker='true']").forEach(input => {
+                    const button = input.parentElement?.querySelector("[data-directory-picker-button='true']");
+                    const status = input.parentElement?.parentElement?.querySelector("[data-directory-picker-status='true']");
+                    if (!(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+                        return;
+                    }
+
+                    const setStatus = (message, isError) => {
+                        if (!(status instanceof HTMLParagraphElement)) {
+                            return;
+                        }
+
+                        if (!message) {
+                            status.hidden = true;
+                            status.textContent = "";
+                            status.classList.remove("error");
+                            return;
+                        }
+
+                        status.hidden = false;
+                        status.textContent = message;
+                        status.classList.toggle("error", !!isError);
+                    };
+
+                    button.addEventListener("click", async () => {
+                        setStatus("", false);
+                        activeInput = input;
+                        portal.hidden = false;
+
+                        const initialPath = input.value.trim();
+                        if (initialPath) {
+                            await loadDirectories(initialPath);
+                        } else {
+                            await loadRoots();
+                        }
+                    });
+                });
+
+                rootsButton.addEventListener("click", loadRoots);
+                upButton.addEventListener("click", async () => {
+                    const parentPath = getParentPath(currentPath);
+                    if (parentPath) {
+                        await loadDirectories(parentPath);
+                        return;
+                    }
+
+                    await loadRoots();
+                });
+                chooseButton.addEventListener("click", () => {
+                    if (activeInput && currentPath) {
+                        activeInput.value = currentPath;
+                    }
+
+                    closePortal();
+                });
+                closeButton.addEventListener("click", closePortal);
+                portal.addEventListener("click", event => {
+                    if (event.target === portal) {
+                        closePortal();
+                    }
+                });
+            };
+
+            const initTwitchLoginAutocomplete = () => {
+                document.querySelectorAll("[data-twitch-login-autocomplete='true']").forEach(input => {
+                    if (!(input instanceof HTMLInputElement)) {
+                        return;
+                    }
+
+                    const minLength = Number.parseInt(input.dataset.twitchLoginMinLength ?? "4", 10);
+                    const suggestions = input.parentElement?.querySelector("[data-twitch-login-suggestions='true']");
+                    if (!(suggestions instanceof HTMLUListElement)) {
+                        return;
+                    }
+
+                    let requestId = 0;
+
+                    const clearSuggestions = () => {
+                        suggestions.innerHTML = "";
+                        suggestions.hidden = true;
+                    };
+
+                    const renderSuggestions = results => {
+                        suggestions.innerHTML = "";
+                        if (!Array.isArray(results) || results.length === 0) {
+                            suggestions.hidden = true;
+                            return;
+                        }
+
+                        for (const result of results) {
+                            const item = document.createElement("li");
+                            const button = document.createElement("button");
+                            button.type = "button";
+                            button.className = "autocomplete-option";
+                            button.innerHTML =
+                                `<div class="autocomplete-primary"><span>${result.displayName}</span><span class="mono">${result.login}</span></div>` +
+                                `<div class="autocomplete-secondary">${result.isLive ? "Live now" : "Offline"}</div>`;
+                            button.addEventListener("click", () => {
+                                input.value = result.login ?? "";
+                                clearSuggestions();
+                                input.focus();
+                            });
+                            item.appendChild(button);
+                            suggestions.appendChild(item);
+                        }
+
+                        suggestions.hidden = false;
+                    };
+
+                    input.addEventListener("input", async () => {
+                        const query = input.value.trim();
+                        if (query.length < minLength) {
+                            clearSuggestions();
+                            return;
+                        }
+
+                        const currentRequestId = ++requestId;
+                        try {
+                            const response = await fetch(`/api/twitch/channels/search?query=${encodeURIComponent(query)}`, {
+                                cache: "no-store"
+                            });
+
+                            if (!response.ok) {
+                                clearSuggestions();
+                                return;
+                            }
+
+                            const results = await response.json();
+                            if (currentRequestId !== requestId) {
+                                return;
+                            }
+
+                            renderSuggestions(results);
+                        } catch {
+                            clearSuggestions();
+                        }
+                    });
+
+                    input.addEventListener("blur", () => {
+                        window.setTimeout(clearSuggestions, 150);
+                    });
+                });
+            };
+
+            initDirectoryPickers();
+            initTwitchLoginAutocomplete();
         })();
     </script>
 </body>

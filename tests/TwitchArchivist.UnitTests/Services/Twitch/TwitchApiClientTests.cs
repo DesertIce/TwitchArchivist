@@ -182,6 +182,56 @@ public class TwitchApiClientTests
         Assert.Equal("12345", userId);
     }
 
+    [Fact]
+    public async Task HelixClientSearchesChannelsAgainstHelixSearchPath()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.twitch.tv/helix/search/channels?query=test&first=10", request.RequestUri?.ToString());
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "12345",
+                          "broadcaster_login": "testchannel",
+                          "display_name": "TestChannel",
+                          "thumbnail_url": "https://example.com/avatar.png",
+                          "is_live": true
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.twitch.tv/helix/")
+        };
+        var factory = new StubHttpClientFactory(client);
+        var authProvider = new StubAccessTokenProvider();
+        var options = Options.Create(new TwitchOptions
+        {
+            ClientId = "client-id"
+        });
+
+        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+
+        var channels = await helixClient.SearchChannelsAsync("test", CancellationToken.None);
+
+        var channel = Assert.Single(channels);
+        Assert.Equal("12345", channel.UserId);
+        Assert.Equal("testchannel", channel.Login);
+        Assert.Equal("TestChannel", channel.DisplayName);
+        Assert.Equal("https://example.com/avatar.png", channel.ThumbnailUrl);
+        Assert.True(channel.IsLive);
+    }
+
     private sealed class StubAccessTokenProvider : ITwitchAccessTokenProvider
     {
         public string? BuildUserAuthorizationUrl(string state, string redirectUri) => null;

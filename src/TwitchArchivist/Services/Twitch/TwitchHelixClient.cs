@@ -25,6 +25,25 @@ public class TwitchHelixClient(
         return response?.Data.FirstOrDefault()?.Id;
     }
 
+    public async Task<IReadOnlyList<TwitchChannelSearchResult>> SearchChannelsAsync(string query, CancellationToken cancellationToken)
+    {
+        var response = await SendHelixAsync<HelixEnvelope<ChannelSearchRecord>>(
+            $"/search/channels?query={Uri.EscapeDataString(query)}&first=10",
+            HttpMethod.Get,
+            body: null,
+            useUserAccessToken: false,
+            cancellationToken);
+
+        return response?.Data
+            .Select(x => new TwitchChannelSearchResult(
+                x.Id,
+                x.BroadcasterLogin,
+                x.DisplayName,
+                x.ThumbnailUrl,
+                x.IsLive))
+            .ToList() ?? [];
+    }
+
     public async Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(
         string broadcasterUserId,
         DateTimeOffset? createdAfterUtc,
@@ -151,6 +170,24 @@ public class TwitchHelixClient(
 
         [JsonPropertyName("condition")]
         public SubscriptionCondition Condition { get; set; } = new();
+    }
+
+    private sealed class ChannelSearchRecord
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("broadcaster_login")]
+        public string BroadcasterLogin { get; set; } = string.Empty;
+
+        [JsonPropertyName("display_name")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [JsonPropertyName("thumbnail_url")]
+        public string ThumbnailUrl { get; set; } = string.Empty;
+
+        [JsonPropertyName("is_live")]
+        public bool IsLive { get; set; }
     }
 
     private sealed class SubscriptionCondition

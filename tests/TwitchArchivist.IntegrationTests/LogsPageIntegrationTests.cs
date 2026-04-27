@@ -10,7 +10,7 @@ public class LogsPageIntegrationTests
     [Fact]
     public async Task LogsPageShowsInformationEntriesByDefault()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new IntegrationTestWebApplicationFactory();
         var store = factory.Services.GetRequiredService<RecentLogStore>();
         store.Clear();
         store.Append(LogLevel.Information, "information entry", category: "Test");
@@ -29,7 +29,7 @@ public class LogsPageIntegrationTests
     [Fact]
     public async Task LogsPageHonorsRequestedMinimumLevel()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new IntegrationTestWebApplicationFactory();
         var store = factory.Services.GetRequiredService<RecentLogStore>();
         store.Clear();
         store.Append(LogLevel.Information, "information entry", category: "Test");
@@ -47,7 +47,7 @@ public class LogsPageIntegrationTests
     [Fact]
     public async Task ClearLogsPostRemovesEntriesAndRedirectsToSelectedLevel()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new IntegrationTestWebApplicationFactory();
         var store = factory.Services.GetRequiredService<RecentLogStore>();
         store.Clear();
         store.Append(LogLevel.Error, "error entry", category: "Test");
