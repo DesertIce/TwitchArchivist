@@ -44,6 +44,50 @@ public class ServiceScriptIntegrationTests
         Assert.Contains(expectedPublishDirectory, standardOutput, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void InstallScriptDryRunHandlesSingleExistingAppSettingsFile()
+    {
+        var scriptPath = Path.Combine(RepositoryRoot, "scripts", "install-service.ps1");
+        var publishDirectory = Path.Combine(Path.GetTempPath(), $"TwitchArchivist-Publish-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(publishDirectory);
+        File.WriteAllText(Path.Combine(publishDirectory, "appsettings.json"), "{ }");
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "pwsh",
+            Arguments =
+                $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" " +
+                "-ServiceName TestTwitchArchivist " +
+                $"-PublishDirectory \"{publishDirectory}\" " +
+                "-WhatIf",
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = RepositoryRoot,
+        };
+
+        using var process = Process.Start(startInfo);
+        Assert.NotNull(process);
+
+        process!.WaitForExit();
+
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+
+        try
+        {
+            Assert.True(
+                process.ExitCode == 0,
+                $"Expected install script to succeed when one appsettings file exists.{Environment.NewLine}" +
+                $"StdOut:{Environment.NewLine}{standardOutput}{Environment.NewLine}" +
+                $"StdErr:{Environment.NewLine}{standardError}");
+        }
+        finally
+        {
+            Directory.Delete(publishDirectory, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("install-service.ps1")]
     [InlineData("update-service.ps1")]

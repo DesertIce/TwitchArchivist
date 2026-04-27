@@ -84,9 +84,9 @@ function Backup-AppSettingsFiles {
         "appsettings.Development.Local.json"
     )
 
-    $existingFiles = $settingsFiles | Where-Object {
+    $existingFiles = @($settingsFiles | Where-Object {
         Test-Path -LiteralPath (Join-Path $PublishDirectory $_)
-    }
+    })
 
     if ($existingFiles.Count -eq 0) {
         return $null
