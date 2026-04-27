@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    env:
+      DOTNET_VERSION: 8.0.x
+      PROJECT_PATH: src/TwitchArchivist/TwitchArchivist.csproj
+      PUBLISH_RUNTIME: win-x64
+      PUBLISH_CONFIGURATION: Release
+      PUBLISH_DIRECTORY: ${{ github.workspace }}\artifacts\publish
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore TwitchArchivist.slnx
+
+      - name: Run tests
+        run: dotnet test TwitchArchivist.slnx --configuration $env:PUBLISH_CONFIGURATION --no-restore
+
+      - name: Determine next release tag
+        id: version
+        shell: pwsh
+        run: |
+          git fetch --force --tags origin
+
+          $latestTag = git tag --list "v*" --sort=-v:refname | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($latestTag)) {
+              $nextVersion = "0.1.0"
+          }
+          else {
+              if ($latestTag -notmatch '^v(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
+                  throw "Latest tag '$latestTag' does not match the expected v<major>.<minor>.<patch> format."
+              }
+
+              $major = [int]$Matches.major
+              $minor = [int]$Matches.minor
+              $patch = [int]$Matches.patch + 1
+              $nextVersion = "$major.$minor.$patch"
+          }
+
+          $releaseTag = "v$nextVersion"
+          $archiveName = "TwitchArchivist-$releaseTag-win-x64.zip"
+          $assemblyVersion = "$nextVersion.0"
+
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "release_version=$nextVersion" >> $env:GITHUB_OUTPUT
+          "assembly_version=$assemblyVersion" >> $env:GITHUB_OUTPUT
+          "archive_name=$archiveName" >> $env:GITHUB_OUTPUT
+
+      - name: Publish application bundle
+        shell: pwsh
+        run: |
+          dotnet publish $env:PROJECT_PATH `
+            --configuration $env:PUBLISH_CONFIGURATION `
+            --runtime $env:PUBLISH_RUNTIME `
+            --self-contained false `
+            --output $env:PUBLISH_DIRECTORY `
+            -p:Version=${{ steps.version.outputs.release_version }} `
+            -p:AssemblyVersion=${{ steps.version.outputs.assembly_version }} `
+            -p:FileVersion=${{ steps.version.outputs.assembly_version }} `
+            -p:InformationalVersion=${{ steps.version.outputs.release_tag }}+${{ github.sha }}
+
+      - name: Archive published files
+        id: archive
+        shell: pwsh
+        run: |
+          $archivePath = Join-Path $env:GITHUB_WORKSPACE ${{ steps.version.outputs.archive_name }}
+          if (Test-Path -LiteralPath $archivePath) {
+              Remove-Item -LiteralPath $archivePath -Force
+          }
+
+          Compress-Archive -Path (Join-Path $env:PUBLISH_DIRECTORY '*') -DestinationPath $archivePath
+          "archive_path=$archivePath" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.release_tag }}" "${{ steps.archive.outputs.archive_path }}" `
+            --target "${{ github.sha }}" `
+            --title "${{ steps.version.outputs.release_tag }}" `
+            --generate-notes

@@ -71,6 +71,16 @@ Defaults:
 
 The install and update scripts publish the app before touching the service and preserve any existing `appsettings*.json` files in the publish directory so local operator config is not overwritten during redeploys.
 
+## GitHub releases
+
+GitHub Actions now creates a release on every push to `main`.
+
+- Workflow: `.github/workflows/release.yml`
+- Tag format: `v<major>.<minor>.<patch>`
+- Current bootstrap behavior: if no prior `v*` tag exists, the first release is `v0.1.0`
+
+Each release runs the test suite, publishes a `win-x64` Release build, and attaches a zipped application bundle to the GitHub release.
+
 Environment variables:
 
 - `APPDATA`
