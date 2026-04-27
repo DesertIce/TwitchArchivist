@@ -1,0 +1,14 @@
+@page
+@model TwitchArchivist.Pages.ErrorModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<section class="panel">
+    <h2>Unexpected error</h2>
+    <p class="muted">The service encountered an unexpected request-processing error.</p>
+    @if (!string.IsNullOrWhiteSpace(Model.RequestId))
+    {
+        <p>Request ID: <code>@Model.RequestId</code></p>
+    }
+</section>

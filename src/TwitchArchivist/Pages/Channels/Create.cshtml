@@ -1,0 +1,31 @@
+@page
+@model TwitchArchivist.Pages.Channels.CreateModel
+@{
+    ViewData["Title"] = "Add channel";
+}
+
+<section class="panel">
+    <h2>Add channel mapping</h2>
+    <p class="muted">The output directory should point at the root folder where completed VOD downloads will be written.</p>
+
+    <div asp-validation-summary="ModelOnly"></div>
+
+    <form method="post">
+        <div class="form-grid">
+            <div>
+                <label asp-for="Input.TwitchLogin"></label>
+                <input asp-for="Input.TwitchLogin" />
+                <span asp-validation-for="Input.TwitchLogin"></span>
+            </div>
+            <div>
+                <label asp-for="Input.OutputDirectory"></label>
+                <input asp-for="Input.OutputDirectory" />
+                <span asp-validation-for="Input.OutputDirectory"></span>
+            </div>
+        </div>
+        <div class="actions">
+            <button type="submit">Save channel</button>
+            <a class="button-link" asp-page="/Channels/Index">Cancel</a>
+        </div>
+    </form>
+</section>

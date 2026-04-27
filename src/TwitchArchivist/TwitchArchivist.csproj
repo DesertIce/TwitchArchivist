@@ -5,7 +5,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="TwitchLib.Api" Version="3.10.2" />
+    <PackageReference Include="TwitchLib.EventSub.Websockets" Version="0.8.0" />
   </ItemGroup>
 
   <PropertyGroup>

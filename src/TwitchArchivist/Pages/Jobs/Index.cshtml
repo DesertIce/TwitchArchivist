@@ -1,0 +1,39 @@
+@page
+@model TwitchArchivist.Pages.Jobs.IndexModel
+@{
+    ViewData["Title"] = "Jobs";
+}
+
+<section class="panel">
+    <h2>Archive jobs</h2>
+    @if (Model.Jobs.Count == 0)
+    {
+        <p class="muted">No archive jobs have been recorded yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Trigger</th>
+                    <th>Created</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var job in Model.Jobs)
+            {
+                <tr>
+                    <td>@job.ChannelConfiguration.TwitchLogin</td>
+                    <td>@job.Status</td>
+                    <td>@job.TriggerSource</td>
+                    <td>@job.CreatedUtc.ToString("u")</td>
+                    <td>@(job.LastError ?? "-")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>

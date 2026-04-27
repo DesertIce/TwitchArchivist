@@ -1,0 +1,46 @@
+@page
+@model TwitchArchivist.Pages.Channels.IndexModel
+@{
+    ViewData["Title"] = "Channels";
+}
+
+<section class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+            <h2>Channel mappings</h2>
+            <p class="muted">Each configured channel maps to one archive output directory.</p>
+        </div>
+        <a class="button-link" asp-page="/Channels/Create">Add channel</a>
+    </div>
+
+    @if (Model.Channels.Count == 0)
+    {
+        <p class="muted">No channels configured yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Twitch login</th>
+                    <th>Output directory</th>
+                    <th>Enabled</th>
+                    <th>Updated</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var channel in Model.Channels)
+            {
+                <tr>
+                    <td>@channel.TwitchLogin</td>
+                    <td>@channel.OutputDirectory</td>
+                    <td>@(channel.IsEnabled ? "Yes" : "No")</td>
+                    <td>@channel.UpdatedUtc.ToString("u")</td>
+                    <td><a asp-page="/Channels/Edit" asp-route-id="@channel.Id">Edit</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>

@@ -1,0 +1,33 @@
+@page "{id:int}"
+@model TwitchArchivist.Pages.Channels.EditModel
+@{
+    ViewData["Title"] = "Edit channel";
+}
+
+<section class="panel">
+    <h2>Edit channel mapping</h2>
+    <div asp-validation-summary="ModelOnly"></div>
+
+    <form method="post">
+        <input type="hidden" asp-for="Input.Id" />
+        <div class="form-grid">
+            <div>
+                <label asp-for="Input.TwitchLogin"></label>
+                <input asp-for="Input.TwitchLogin" />
+                <span asp-validation-for="Input.TwitchLogin"></span>
+            </div>
+            <div>
+                <label asp-for="Input.OutputDirectory"></label>
+                <input asp-for="Input.OutputDirectory" />
+                <span asp-validation-for="Input.OutputDirectory"></span>
+            </div>
+        </div>
+        <div style="margin-top:1rem;">
+            <label><input asp-for="Input.IsEnabled" /> Enabled</label>
+        </div>
+        <div class="actions">
+            <button type="submit">Save changes</button>
+            <a class="button-link" asp-page="/Channels/Index">Back</a>
+        </div>
+    </form>
+</section>

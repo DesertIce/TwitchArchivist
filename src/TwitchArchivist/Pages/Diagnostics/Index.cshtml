@@ -1,0 +1,37 @@
+@page
+@model TwitchArchivist.Pages.Diagnostics.IndexModel
+@{
+    ViewData["Title"] = "Diagnostics";
+}
+
+<section class="panel">
+    <h2>Runtime diagnostics</h2>
+    <table>
+        <tbody>
+            <tr>
+                <th>Database ready</th>
+                <td>@Model.RuntimeStatus.DatabaseReady</td>
+            </tr>
+            <tr>
+                <th>Downloader executable</th>
+                <td>@(Model.RuntimeStatus.DownloaderExecutablePath ?? "Not configured")</td>
+            </tr>
+            <tr>
+                <th>Downloader valid</th>
+                <td>@Model.RuntimeStatus.DownloaderExecutableValid</td>
+            </tr>
+            <tr>
+                <th>EventSub state</th>
+                <td>@Model.RuntimeStatus.EventSubConnectionState</td>
+            </tr>
+            <tr>
+                <th>Message</th>
+                <td>@Model.RuntimeStatus.DiagnosticsMessage</td>
+            </tr>
+            <tr>
+                <th>Updated UTC</th>
+                <td>@Model.RuntimeStatus.UpdatedUtc.ToString("u")</td>
+            </tr>
+        </tbody>
+    </table>
+</section>

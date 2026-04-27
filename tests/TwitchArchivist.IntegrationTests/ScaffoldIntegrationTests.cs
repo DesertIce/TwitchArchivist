@@ -1,12 +1,19 @@
+using Microsoft.AspNetCore.Mvc.Testing;
+
 namespace TwitchArchivist.IntegrationTests;
 
 public class ScaffoldIntegrationTests
 {
     [Fact]
-    public void PersistenceExtensionIsAvailable()
+    public async Task HealthEndpointReturnsHealthyStatus()
     {
-        var extensionType = typeof(TwitchArchivist.Persistence.ServiceCollectionExtensions);
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
 
-        Assert.Equal("ServiceCollectionExtensions", extensionType.Name);
+        var response = await client.GetAsync("/healthz");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Contains("healthy", payload);
     }
 }

@@ -1,12 +1,14 @@
+using TwitchArchivist.Models;
+
 namespace TwitchArchivist.UnitTests;
 
 public class ScaffoldTests
 {
     [Fact]
-    public void ServiceEntryAssemblyExists()
+    public void StorageOptionsUseExpectedDefaultPath()
     {
-        var assembly = typeof(Program).Assembly;
+        var options = new StorageOptions();
 
-        Assert.Equal("TwitchArchivist", assembly.GetName().Name);
+        Assert.Equal("data/twitcharchivist.db", options.DatabasePath);
     }
 }

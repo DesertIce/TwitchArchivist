@@ -1,0 +1,67 @@
+@page
+@model TwitchArchivist.Pages.IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<section class="panel">
+    <h2>Service overview</h2>
+    <p class="muted">Local control surface for channel mappings, downloader configuration visibility, and archive job history.</p>
+    <div class="grid">
+        <div>
+            <div class="muted">Configured channels</div>
+            <div class="metric">@Model.ChannelCount</div>
+        </div>
+        <div>
+            <div class="muted">Enabled channels</div>
+            <div class="metric">@Model.EnabledChannelCount</div>
+        </div>
+        <div>
+            <div class="muted">Archive jobs</div>
+            <div class="metric">@Model.JobCount</div>
+        </div>
+        <div>
+            <div class="muted">Database</div>
+            <div class="metric">@(Model.RuntimeStatus.DatabaseReady ? "Ready" : "Starting")</div>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Diagnostics</h2>
+    <p><strong>Downloader:</strong> <span class="badge @(Model.RuntimeStatus.DownloaderExecutableValid ? "" : "warn")">@Model.DownloaderStatusLabel</span></p>
+    <p class="muted">@Model.RuntimeStatus.DiagnosticsMessage</p>
+    <p><strong>EventSub:</strong> <span class="badge warn">@Model.RuntimeStatus.EventSubConnectionState</span></p>
+</section>
+
+<section class="panel">
+    <h2>Recent jobs</h2>
+    @if (Model.RecentJobs.Count == 0)
+    {
+        <p class="muted">No archive jobs have been recorded yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Output</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var job in Model.RecentJobs)
+            {
+                <tr>
+                    <td>@job.ChannelConfiguration.TwitchLogin</td>
+                    <td>@job.Status</td>
+                    <td>@job.CreatedUtc.ToString("u")</td>
+                    <td>@(job.OutputPath ?? "-")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>
