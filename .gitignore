@@ -36,3 +36,4 @@ src/TwitchArchivist/appsettings.Development.json
 # Worktree helpers
 .worktrees/
 worktrees/
+.claude/settings.local.json
