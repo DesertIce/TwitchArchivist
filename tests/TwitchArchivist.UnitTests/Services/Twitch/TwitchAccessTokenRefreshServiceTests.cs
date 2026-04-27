@@ -8,7 +8,7 @@ namespace TwitchArchivist.UnitTests.Services.Twitch;
 public class TwitchAccessTokenRefreshServiceTests
 {
     [Fact]
-    public async Task RefreshServicePollsAccessTokenProviderOnInterval()
+    public async Task RefreshServicePollsAppAndUserAccessTokensOnInterval()
     {
         var provider = new CountingAccessTokenProvider();
         var options = Options.Create(new TwitchOptions
@@ -28,17 +28,37 @@ public class TwitchAccessTokenRefreshServiceTests
         await Task.Delay(TimeSpan.FromMilliseconds(1200));
         await service.StopAsync(CancellationToken.None);
 
-        Assert.True(provider.CallCount >= 2, $"Expected at least 2 refresh attempts but saw {provider.CallCount}.");
+        Assert.True(provider.AppCallCount >= 2, $"Expected at least 2 app-token refresh attempts but saw {provider.AppCallCount}.");
+        Assert.True(provider.UserCallCount >= 2, $"Expected at least 2 user-token refresh attempts but saw {provider.UserCallCount}.");
     }
 
     private sealed class CountingAccessTokenProvider : ITwitchAccessTokenProvider
     {
-        public int CallCount { get; private set; }
+        public int AppCallCount { get; private set; }
 
-        public Task<string?> GetAccessTokenAsync(CancellationToken cancellationToken)
+        public int UserCallCount { get; private set; }
+
+        public string? BuildUserAuthorizationUrl(string state, string redirectUri) => null;
+
+        public Task ExchangeAuthorizationCodeAsync(string code, string redirectUri, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task<string?> GetAppAccessTokenAsync(CancellationToken cancellationToken)
         {
-            CallCount++;
-            return Task.FromResult<string?>("token");
+            AppCallCount++;
+            return Task.FromResult<string?>("app-token");
         }
+
+        public Task<string?> GetUserAccessTokenAsync(CancellationToken cancellationToken)
+        {
+            UserCallCount++;
+            return Task.FromResult<string?>("user-token");
+        }
+
+        public Task<TwitchUserAuthorizationState> GetUserAuthorizationStateAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new TwitchUserAuthorizationState(false, false, "missing", null, false, null, null, null, null));
+
+        public Task<TwitchUserAuthorizationState> ValidateUserAuthorizationAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new TwitchUserAuthorizationState(false, false, "missing", null, false, null, null, null, null));
     }
 }

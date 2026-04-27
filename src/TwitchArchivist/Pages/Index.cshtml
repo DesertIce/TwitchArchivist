@@ -30,8 +30,19 @@
 <section class="panel">
     <h2>Diagnostics</h2>
     <p><strong>Downloader:</strong> <span class="badge @(Model.RuntimeStatus.DownloaderExecutableValid ? "" : "warn")">@Model.DownloaderStatusLabel</span></p>
-    <p class="muted">@Model.RuntimeStatus.DiagnosticsMessage</p>
-    <p><strong>EventSub:</strong> <span class="badge warn">@Model.RuntimeStatus.EventSubConnectionState</span></p>
+    <p class="muted" id="runtime-diagnostics-message">@Model.RuntimeStatus.DiagnosticsMessage</p>
+    <p><strong>EventSub:</strong> <span class="badge warn" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></p>
+    <p><strong>Twitch OAuth:</strong> <span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.TwitchAuthorizationStatusLabel</span></p>
+    <p class="muted" id="runtime-twitch-detail">
+        @(Model.RuntimeStatus.TwitchUserAuthorizationConfigured
+            ? Model.TwitchAuthorizationDetail
+            : "Authorize a Twitch user token so EventSub WebSocket subscriptions can be created.")
+    </p>
+    <p class="muted" id="runtime-twitch-user">@(Model.RuntimeStatus.TwitchUserAuthorizationLogin is null ? string.Empty : $"Authorized as {Model.RuntimeStatus.TwitchUserAuthorizationLogin}")</p>
+    <p class="muted" id="runtime-twitch-expires">@(Model.RuntimeStatus.TwitchUserAuthorizationExpiresUtc?.ToString("u") ?? string.Empty)</p>
+    <p>
+        <a class="button-link" href="/auth/twitch/start">Start or re-run Twitch authorization</a>
+    </p>
 </section>
 
 <section class="panel">

@@ -156,6 +156,16 @@
             border-color: rgba(147, 197, 253, 0.45);
         }
 
+        select {
+            width: 100%;
+            padding: 0.65rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-strong);
+            box-sizing: border-box;
+            background: var(--bg-elevated);
+            color: var(--text);
+        }
+
         .form-grid {
             display: grid;
             gap: 1rem;
@@ -207,9 +217,22 @@
             border: 1px solid rgba(245, 158, 11, 0.18);
         }
 
+        .badge.danger {
+            background: rgba(239, 68, 68, 0.16);
+            color: var(--danger-text);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
         .validation-summary-errors {
             color: var(--danger-text);
             margin-bottom: 1rem;
+        }
+
+        .log-text {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font: inherit;
         }
 
         @@media (max-width: 720px) {
@@ -227,10 +250,66 @@
             <a asp-page="/Channels/Index">Channels</a>
             <a asp-page="/Jobs/Index">Jobs</a>
             <a asp-page="/Diagnostics/Index">Diagnostics</a>
+            <a asp-page="/Logs/Index">Logs</a>
         </nav>
     </header>
     <main>
         @RenderBody()
     </main>
+    <script>
+        (() => {
+            const validityElement = document.getElementById("runtime-twitch-validity");
+            if (!validityElement) {
+                return;
+            }
+
+            const setText = (id, value, fallback = "") => {
+                const element = document.getElementById(id);
+                if (!element) {
+                    return;
+                }
+
+                element.textContent = value ?? fallback;
+            };
+
+            const applyValidityClass = value => {
+                validityElement.classList.remove("warn", "danger");
+                if (value === "expiring-soon") {
+                    validityElement.classList.add("warn");
+                } else if (value !== "valid") {
+                    validityElement.classList.add("danger");
+                }
+            };
+
+            const renderRuntimeStatus = payload => {
+                setText("runtime-diagnostics-message", payload.diagnosticsMessage ?? "");
+                setText("runtime-eventsub-state", payload.eventSubConnectionState ?? "");
+                setText("runtime-twitch-configured", payload.twitchUserAuthorizationConfigured ? "Configured" : "Missing");
+                setText("runtime-twitch-validity", payload.twitchUserAuthorizationValidity ?? "missing");
+                setText("runtime-twitch-user", payload.twitchUserAuthorizationLogin ?? "Not authorized");
+                setText("runtime-twitch-expires", payload.twitchUserAuthorizationExpiresUtc ?? "Not authorized");
+                setText("runtime-twitch-last-validated", payload.twitchUserAuthorizationLastValidatedUtc ?? "Not validated");
+                setText("runtime-twitch-detail", payload.twitchUserAuthorizationDetail ?? "");
+                setText("runtime-updated-utc", payload.updatedUtc ?? "");
+                applyValidityClass(payload.twitchUserAuthorizationValidity ?? "missing");
+            };
+
+            const refreshRuntimeStatus = async () => {
+                try {
+                    const response = await fetch("/api/runtime-status", { cache: "no-store" });
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    const payload = await response.json();
+                    renderRuntimeStatus(payload);
+                } catch {
+                }
+            };
+
+            refreshRuntimeStatus();
+            window.setInterval(refreshRuntimeStatus, 15000);
+        })();
+    </script>
 </body>
 </html>

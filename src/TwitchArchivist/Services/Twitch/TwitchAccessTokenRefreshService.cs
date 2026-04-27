@@ -14,7 +14,7 @@ public sealed class TwitchAccessTokenRefreshService(
         {
             try
             {
-                await accessTokenProvider.GetAccessTokenAsync(stoppingToken);
+                await accessTokenProvider.GetAppAccessTokenAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -23,6 +23,19 @@ public sealed class TwitchAccessTokenRefreshService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to refresh the Twitch app access token");
+            }
+
+            try
+            {
+                await accessTokenProvider.GetUserAccessTokenAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to refresh the Twitch user access token");
             }
 
             var pollingIntervalSeconds = Math.Max(1, twitchOptions.Value.AppAccessTokenRefreshPollingIntervalSeconds);

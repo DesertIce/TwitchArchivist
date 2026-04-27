@@ -20,6 +20,19 @@ public class IndexModel(TwitchArchivistDbContext dbContext, RuntimeStatusStore r
 
     public string DownloaderStatusLabel => runtimeStatusStore.DownloaderExecutableValid ? "Configured" : "Attention needed";
 
+    public string TwitchAuthorizationStatusLabel => runtimeStatusStore.TwitchUserAuthorizationValidity;
+
+    public string TwitchAuthorizationBadgeClass => runtimeStatusStore.TwitchUserAuthorizationValidity switch
+    {
+        "valid" => string.Empty,
+        "expiring-soon" => "warn",
+        _ => "danger"
+    };
+
+    public string TwitchAuthorizationDetail => runtimeStatusStore.TwitchUserAuthorizationConfigured
+        ? runtimeStatusStore.TwitchUserAuthorizationDetail ?? $"Authorized as {runtimeStatusStore.TwitchUserAuthorizationLogin ?? "unknown"}"
+        : "Authorize a Twitch user token so EventSub WebSocket subscriptions can be created.";
+
     public async Task OnGetAsync()
     {
         ChannelCount = await dbContext.ChannelConfigurations.CountAsync();

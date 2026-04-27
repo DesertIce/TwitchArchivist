@@ -19,6 +19,7 @@ public class TwitchHelixClient(
             $"/users?login={Uri.EscapeDataString(twitchLogin)}",
             HttpMethod.Get,
             body: null,
+            useUserAccessToken: false,
             cancellationToken);
 
         return response?.Data.FirstOrDefault()?.Id;
@@ -33,6 +34,7 @@ public class TwitchHelixClient(
             $"/videos?user_id={Uri.EscapeDataString(broadcasterUserId)}&type=archive&first=5",
             HttpMethod.Get,
             body: null,
+            useUserAccessToken: false,
             cancellationToken);
 
         var videos = response?.Data
@@ -48,6 +50,7 @@ public class TwitchHelixClient(
             "/eventsub/subscriptions",
             HttpMethod.Get,
             body: null,
+            useUserAccessToken: true,
             cancellationToken);
 
         return response?.Data
@@ -80,6 +83,7 @@ public class TwitchHelixClient(
             "/eventsub/subscriptions",
             HttpMethod.Post,
             payload,
+            useUserAccessToken: true,
             cancellationToken);
 
         var record = response?.Data.FirstOrDefault()
@@ -88,10 +92,14 @@ public class TwitchHelixClient(
         return new EventSubSubscriptionRecord(record.Id, record.Type, record.Status, record.Condition.BroadcasterUserId);
     }
 
-    private async Task<T?> SendHelixAsync<T>(string relativePath, HttpMethod method, object? body, CancellationToken cancellationToken)
+    private async Task<T?> SendHelixAsync<T>(string relativePath, HttpMethod method, object? body, bool useUserAccessToken, CancellationToken cancellationToken)
     {
-        var token = await accessTokenProvider.GetAccessTokenAsync(cancellationToken)
-            ?? throw new InvalidOperationException("Twitch app credentials are not configured.");
+        var token = useUserAccessToken
+            ? await accessTokenProvider.GetUserAccessTokenAsync(cancellationToken)
+            : await accessTokenProvider.GetAppAccessTokenAsync(cancellationToken);
+        token ??= useUserAccessToken
+            ? throw new InvalidOperationException("Twitch user authorization is not configured.")
+            : throw new InvalidOperationException("Twitch app credentials are not configured.");
 
         var options = twitchOptions.Value;
         var client = httpClientFactory.CreateClient(nameof(TwitchHelixClient));

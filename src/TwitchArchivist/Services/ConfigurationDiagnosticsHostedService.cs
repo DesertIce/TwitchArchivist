@@ -6,6 +6,7 @@ namespace TwitchArchivist.Services;
 
 public class ConfigurationDiagnosticsHostedService(
     IOptions<DownloaderOptions> downloaderOptions,
+    ITwitchAccessTokenProvider accessTokenProvider,
     RuntimeStatusStore runtimeStatusStore,
     ILogger<ConfigurationDiagnosticsHostedService> logger) : BackgroundService
 {
@@ -24,6 +25,16 @@ public class ConfigurationDiagnosticsHostedService(
                     : $"Configured TwitchDownloaderCLI path was not found: {configuredPath}";
 
             runtimeStatusStore.UpdateDownloaderValidation(configuredPath, isValid, message);
+
+            var authorizationState = await accessTokenProvider.ValidateUserAuthorizationAsync(stoppingToken);
+            runtimeStatusStore.UpdateTwitchUserAuthorization(
+                authorizationState.IsConfigured,
+                authorizationState.IsValid,
+                authorizationState.Validity,
+                authorizationState.Detail,
+                authorizationState.TwitchUserLogin,
+                authorizationState.ExpiresUtc,
+                authorizationState.LastValidatedUtc);
             logger.LogInformation("Configuration diagnostics refreshed");
 
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);

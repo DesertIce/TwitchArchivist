@@ -22,16 +22,44 @@
             </tr>
             <tr>
                 <th>EventSub state</th>
-                <td>@Model.RuntimeStatus.EventSubConnectionState</td>
+                <td id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</td>
+            </tr>
+            <tr>
+                <th>Twitch OAuth user token</th>
+                <td id="runtime-twitch-configured">@(Model.RuntimeStatus.TwitchUserAuthorizationConfigured ? "Configured" : "Missing")</td>
+            </tr>
+            <tr>
+                <th>Twitch OAuth validity</th>
+                <td><span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.RuntimeStatus.TwitchUserAuthorizationValidity</span></td>
+            </tr>
+            <tr>
+                <th>Twitch OAuth user</th>
+                <td id="runtime-twitch-user">@(Model.RuntimeStatus.TwitchUserAuthorizationLogin ?? "Not authorized")</td>
+            </tr>
+            <tr>
+                <th>Twitch OAuth expires UTC</th>
+                <td id="runtime-twitch-expires">@(Model.RuntimeStatus.TwitchUserAuthorizationExpiresUtc?.ToString("u") ?? "Not authorized")</td>
+            </tr>
+            <tr>
+                <th>Twitch OAuth last validated UTC</th>
+                <td id="runtime-twitch-last-validated">@(Model.RuntimeStatus.TwitchUserAuthorizationLastValidatedUtc?.ToString("u") ?? "Not validated")</td>
+            </tr>
+            <tr>
+                <th>Twitch OAuth detail</th>
+                <td id="runtime-twitch-detail">@(Model.RuntimeStatus.TwitchUserAuthorizationDetail ?? "No Twitch user token is stored.")</td>
             </tr>
             <tr>
                 <th>Message</th>
-                <td>@Model.RuntimeStatus.DiagnosticsMessage</td>
+                <td id="runtime-diagnostics-message">@Model.RuntimeStatus.DiagnosticsMessage</td>
             </tr>
             <tr>
                 <th>Updated UTC</th>
-                <td>@Model.RuntimeStatus.UpdatedUtc.ToString("u")</td>
+                <td id="runtime-updated-utc">@Model.RuntimeStatus.UpdatedUtc.ToString("u")</td>
             </tr>
         </tbody>
     </table>
+
+    <p>
+        <a class="button-link" href="/auth/twitch/start">Start or re-run Twitch authorization</a>
+    </p>
 </section>

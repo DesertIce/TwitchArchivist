@@ -17,6 +17,10 @@ public class TwitchEventSubHostedService(
     ILogger<TwitchEventSubHostedService> logger) : IHostedService
 {
     private static readonly Uri EventSubEndpoint = new("wss://eventsub.wss.twitch.tv/ws");
+    private readonly SemaphoreSlim _connectSync = new(1, 1);
+    private CancellationTokenSource? _backgroundCancellationTokenSource;
+    private Task? _monitorTask;
+    private volatile bool _isConnected;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -27,12 +31,29 @@ public class TwitchEventSubHostedService(
         eventSubWebsocketClient.StreamOnline += OnStreamOnlineAsync;
         eventSubWebsocketClient.StreamOffline += OnStreamOfflineAsync;
 
-        _ = ConnectIfConfiguredAsync(cancellationToken);
+        _backgroundCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _monitorTask = MonitorConnectionAsync(_backgroundCancellationTokenSource.Token);
         return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        if (_backgroundCancellationTokenSource is not null)
+        {
+            await _backgroundCancellationTokenSource.CancelAsync();
+        }
+
+        if (_monitorTask is not null)
+        {
+            try
+            {
+                await _monitorTask.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
         eventSubWebsocketClient.WebsocketConnected -= OnWebsocketConnectedAsync;
         eventSubWebsocketClient.WebsocketDisconnected -= OnWebsocketDisconnectedAsync;
         eventSubWebsocketClient.WebsocketReconnected -= OnWebsocketReconnectedAsync;
@@ -42,15 +63,42 @@ public class TwitchEventSubHostedService(
         await eventSubWebsocketClient.DisconnectAsync();
     }
 
+    private async Task MonitorConnectionAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await ConnectIfConfiguredAsync(cancellationToken);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+    }
+
     private async Task ConnectIfConfiguredAsync(CancellationToken cancellationToken)
     {
+        if (_isConnected)
+        {
+            return;
+        }
+
+        await _connectSync.WaitAsync(cancellationToken);
         try
         {
-            var token = await accessTokenProvider.GetAccessTokenAsync(cancellationToken);
+            if (_isConnected)
+            {
+                return;
+            }
+
+            var token = await accessTokenProvider.GetUserAccessTokenAsync(cancellationToken);
             if (string.IsNullOrWhiteSpace(token))
             {
-                runtimeStatusStore.UpdateEventSubConnectionState("not-configured");
-                logger.LogInformation("Skipping EventSub websocket connection because Twitch credentials are not configured");
+                runtimeStatusStore.UpdateEventSubConnectionState("awaiting-authorization");
                 return;
             }
 
@@ -62,10 +110,15 @@ public class TwitchEventSubHostedService(
             runtimeStatusStore.UpdateEventSubConnectionState("error");
             logger.LogError(ex, "Failed to initialize the EventSub websocket connection");
         }
+        finally
+        {
+            _connectSync.Release();
+        }
     }
 
     private async Task OnWebsocketConnectedAsync(object? sender, WebsocketConnectedArgs args)
     {
+        _isConnected = true;
         runtimeStatusStore.UpdateEventSubConnectionState(args.IsRequestedReconnect ? "reconnected" : "connected");
         logger.LogInformation("EventSub websocket connected with session {SessionId}", eventSubWebsocketClient.SessionId);
 
@@ -230,6 +283,7 @@ public class TwitchEventSubHostedService(
 
     private Task OnWebsocketDisconnectedAsync(object? sender, WebsocketDisconnectedArgs args)
     {
+        _isConnected = false;
         runtimeStatusStore.UpdateEventSubConnectionState("disconnected");
         logger.LogWarning("EventSub websocket disconnected");
         return Task.CompletedTask;
@@ -237,6 +291,7 @@ public class TwitchEventSubHostedService(
 
     private Task OnWebsocketReconnectedAsync(object? sender, WebsocketReconnectedArgs args)
     {
+        _isConnected = true;
         runtimeStatusStore.UpdateEventSubConnectionState("reconnected");
         logger.LogInformation("EventSub websocket reconnected");
         return Task.CompletedTask;
@@ -244,6 +299,7 @@ public class TwitchEventSubHostedService(
 
     private Task OnErrorOccurredAsync(object? sender, ErrorOccuredArgs args)
     {
+        _isConnected = false;
         runtimeStatusStore.UpdateEventSubConnectionState("error");
         logger.LogError(args.Exception, "EventSub websocket error");
         return Task.CompletedTask;

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
 using TwitchArchivist.Services.Twitch;
@@ -32,9 +34,14 @@ public class TwitchApiClientTests
             AppAccessTokenRefreshBufferMinutes = 5
         });
 
-        var provider = new TwitchAccessTokenProvider(factory, options);
+        var services = new ServiceCollection().BuildServiceProvider();
+        var provider = new TwitchAccessTokenProvider(
+            factory,
+            services.GetRequiredService<IServiceScopeFactory>(),
+            options,
+            NullLogger<TwitchAccessTokenProvider>.Instance);
 
-        var token = await provider.GetAccessTokenAsync(CancellationToken.None);
+        var token = await provider.GetAppAccessTokenAsync(CancellationToken.None);
 
         Assert.Equal("test-token", token);
     }
@@ -177,8 +184,22 @@ public class TwitchApiClientTests
 
     private sealed class StubAccessTokenProvider : ITwitchAccessTokenProvider
     {
-        public Task<string?> GetAccessTokenAsync(CancellationToken cancellationToken)
+        public string? BuildUserAuthorizationUrl(string state, string redirectUri) => null;
+
+        public Task ExchangeAuthorizationCodeAsync(string code, string redirectUri, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task<string?> GetAppAccessTokenAsync(CancellationToken cancellationToken)
             => Task.FromResult<string?>("test-token");
+
+        public Task<string?> GetUserAccessTokenAsync(CancellationToken cancellationToken)
+            => Task.FromResult<string?>("test-token");
+
+        public Task<TwitchUserAuthorizationState> GetUserAuthorizationStateAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new TwitchUserAuthorizationState(false, false, "missing", null, false, null, null, null, null));
+
+        public Task<TwitchUserAuthorizationState> ValidateUserAuthorizationAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new TwitchUserAuthorizationState(false, false, "missing", null, false, null, null, null, null));
     }
 
     private sealed class StubHttpClientFactory(HttpClient client) : IHttpClientFactory

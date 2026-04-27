@@ -21,6 +21,19 @@ TwitchArchivist is a Windows-service-oriented ASP.NET Core application that will
 1. Restore dependencies with `dotnet restore TwitchArchivist.slnx`
 2. Build with `dotnet build TwitchArchivist.slnx`
 3. Run the web host with `dotnet run --project src/TwitchArchivist`
+4. Open `http://localhost:5000/diagnostics` and use `Authorize Twitch user token` to complete the EventSub WebSocket OAuth flow.
+
+## Twitch OAuth callback
+
+EventSub WebSocket subscriptions in this app use a Twitch user access token. The OAuth callback is served by the same ASP.NET host as the admin UI.
+
+Register this redirect URI in the Twitch developer console for local use:
+
+- `http://localhost:5000/auth/twitch/callback`
+
+After the service is running, start the flow from:
+
+- `http://localhost:5000/auth/twitch/start`
 
 ## Windows service scripts
 
@@ -69,3 +82,7 @@ The repo intentionally does not track live `appsettings.json` files anymore. Sta
 
 - `src/TwitchArchivist/appsettings.example.json`
 - `src/TwitchArchivist/appsettings.Development.example.json`
+
+If `Downloader:ExecutablePath` is left blank, the app falls back to:
+
+- `%APPDATA%\\TwitchDownloaderCLI\\TwitchDownloaderCLI.exe`

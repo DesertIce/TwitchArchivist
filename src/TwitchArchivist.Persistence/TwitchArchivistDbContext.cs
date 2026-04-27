@@ -13,6 +13,8 @@ public class TwitchArchivistDbContext(DbContextOptions<TwitchArchivistDbContext>
 
     public DbSet<ArchiveJob> ArchiveJobs => Set<ArchiveJob>();
 
+    public DbSet<TwitchOAuthToken> TwitchOAuthTokens => Set<TwitchOAuthToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ChannelConfiguration>(entity =>
@@ -56,6 +58,16 @@ public class TwitchArchivistDbContext(DbContextOptions<TwitchArchivistDbContext>
                 .WithMany(x => x.ArchiveJobs)
                 .HasForeignKey(x => x.ChannelConfigurationId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TwitchOAuthToken>(entity =>
+        {
+            entity.Property(x => x.AccessToken).HasMaxLength(4096);
+            entity.Property(x => x.RefreshToken).HasMaxLength(4096);
+            entity.Property(x => x.TokenType).HasMaxLength(64);
+            entity.Property(x => x.Scope).HasMaxLength(2048);
+            entity.Property(x => x.TwitchUserId).HasMaxLength(64);
+            entity.Property(x => x.TwitchUserLogin).HasMaxLength(128);
         });
     }
 }
