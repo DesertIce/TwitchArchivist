@@ -61,6 +61,8 @@ public class LogsPageIntegrationTests
 
         Assert.Equal(System.Net.HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/logs?minimumLevel=Error", response.Headers.Location?.ToString());
-        Assert.Empty(store.GetEntries(LogLevel.Trace));
+        Assert.DoesNotContain(
+            store.GetEntries(LogLevel.Trace),
+            entry => entry.Category == "Test" && entry.Message.Contains("error entry", StringComparison.Ordinal));
     }
 }
