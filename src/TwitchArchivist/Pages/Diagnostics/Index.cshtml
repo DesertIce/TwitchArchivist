@@ -1,65 +1,57 @@
 @page
 @model TwitchArchivist.Pages.Diagnostics.IndexModel
-@{
-    ViewData["Title"] = "Diagnostics";
-}
+@using TwitchArchivist.Pages
+@{ ViewData["Title"] = "Diagnostics"; }
 
 <section class="panel">
-    <h2>Runtime diagnostics</h2>
-    <table>
-        <tbody>
-            <tr>
-                <th>Database ready</th>
-                <td>@Model.RuntimeStatus.DatabaseReady</td>
-            </tr>
-            <tr>
-                <th>Downloader executable</th>
-                <td>@(Model.RuntimeStatus.DownloaderExecutablePath ?? "Not configured")</td>
-            </tr>
-            <tr>
-                <th>Downloader valid</th>
-                <td>@Model.RuntimeStatus.DownloaderExecutableValid</td>
-            </tr>
-            <tr>
-                <th>EventSub state</th>
-                <td id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</td>
-            </tr>
-            <tr>
-                <th>Twitch OAuth user token</th>
-                <td id="runtime-twitch-configured">@(Model.RuntimeStatus.TwitchUserAuthorizationConfigured ? "Configured" : "Missing")</td>
-            </tr>
-            <tr>
-                <th>Twitch OAuth validity</th>
-                <td><span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.RuntimeStatus.TwitchUserAuthorizationValidity</span></td>
-            </tr>
-            <tr>
-                <th>Twitch OAuth user</th>
-                <td id="runtime-twitch-user">@(Model.RuntimeStatus.TwitchUserAuthorizationLogin ?? "Not authorized")</td>
-            </tr>
-            <tr>
-                <th>Twitch OAuth expires UTC</th>
-                <td id="runtime-twitch-expires">@(Model.RuntimeStatus.TwitchUserAuthorizationExpiresUtc?.ToString("u") ?? "Not authorized")</td>
-            </tr>
-            <tr>
-                <th>Twitch OAuth last validated UTC</th>
-                <td id="runtime-twitch-last-validated">@(Model.RuntimeStatus.TwitchUserAuthorizationLastValidatedUtc?.ToString("u") ?? "Not validated")</td>
-            </tr>
-            <tr>
-                <th>Twitch OAuth detail</th>
-                <td id="runtime-twitch-detail">@(Model.RuntimeStatus.TwitchUserAuthorizationDetail ?? "No Twitch user token is stored.")</td>
-            </tr>
-            <tr>
-                <th>Message</th>
-                <td id="runtime-diagnostics-message">@Model.RuntimeStatus.DiagnosticsMessage</td>
-            </tr>
-            <tr>
-                <th>Updated UTC</th>
-                <td id="runtime-updated-utc">@Model.RuntimeStatus.UpdatedUtc.ToString("u")</td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="panel-header-row">
+        <h2>Service health</h2>
+        <span class="heartbeat" id="runtime-relative"></span>
+    </div>
+    <dl class="kv-card">
+        <dt>Database</dt>
+        <dd><span class="badge @UiBadges.BoolBadgeClass(Model.RuntimeStatus.DatabaseReady)">@(Model.RuntimeStatus.DatabaseReady ? "Ready" : "Starting")</span></dd>
 
-    <p>
+        <dt>Downloader executable</dt>
+        <dd><span class="mono">@(Model.RuntimeStatus.DownloaderExecutablePath ?? "Not configured")</span></dd>
+
+        <dt>Downloader valid</dt>
+        <dd><span class="badge @UiBadges.BoolBadgeClass(Model.RuntimeStatus.DownloaderExecutableValid)">@(Model.RuntimeStatus.DownloaderExecutableValid ? "Yes" : "No")</span></dd>
+
+        <dt>EventSub state</dt>
+        <dd><span class="badge @UiBadges.EventSubBadgeClass(Model.RuntimeStatus.EventSubConnectionState)" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></dd>
+    </dl>
+</section>
+
+<section class="panel">
+    <h2>Twitch authorization</h2>
+    <dl class="kv-card">
+        <dt>Status</dt>
+        <dd><span id="runtime-twitch-configured">@(Model.RuntimeStatus.TwitchUserAuthorizationConfigured ? "Configured" : "Missing")</span></dd>
+
+        <dt>Validity</dt>
+        <dd><span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.RuntimeStatus.TwitchUserAuthorizationValidity</span></dd>
+
+        <dt>User</dt>
+        <dd><span class="mono" id="runtime-twitch-user">@(Model.RuntimeStatus.TwitchUserAuthorizationLogin ?? "Not authorized")</span></dd>
+
+        <dt>Expires</dt>
+        <dd><span class="mono" id="runtime-twitch-expires">@(Model.RuntimeStatus.TwitchUserAuthorizationExpiresUtc?.ToString("u") ?? "Not authorized")</span></dd>
+
+        <dt>Last validated</dt>
+        <dd><span class="mono" id="runtime-twitch-last-validated">@(Model.RuntimeStatus.TwitchUserAuthorizationLastValidatedUtc?.ToString("u") ?? "Not validated")</span></dd>
+
+        <dt>Detail</dt>
+        <dd id="runtime-twitch-detail">@(Model.RuntimeStatus.TwitchUserAuthorizationDetail ?? "No Twitch user token is stored.")</dd>
+    </dl>
+
+    <p class="actions">
         <a class="button-link" href="/auth/twitch/start">Start or re-run Twitch authorization</a>
     </p>
+</section>
+
+<section class="panel">
+    <h2>Diagnostics message</h2>
+    <p id="runtime-diagnostics-message">@(string.IsNullOrWhiteSpace(Model.RuntimeStatus.DiagnosticsMessage) ? "—" : Model.RuntimeStatus.DiagnosticsMessage)</p>
+    <p class="muted">Last updated <span class="mono" id="runtime-updated-utc">@Model.RuntimeStatus.UpdatedUtc.ToString("u")</span></p>
 </section>

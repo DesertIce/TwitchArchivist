@@ -31,7 +31,7 @@ public class ScaffoldIntegrationTests
         Assert.Contains("Service overview", payload);
         Assert.Contains("Recent jobs", payload);
         Assert.Contains("color-scheme: dark", payload);
-        Assert.Contains("Start or re-run Twitch authorization", payload);
+        Assert.Contains("/auth/twitch/start", payload);
     }
 
     [Fact]

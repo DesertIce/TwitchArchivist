@@ -1,4 +1,5 @@
 @page
+@using TwitchArchivist.Pages
 @model TwitchArchivist.Pages.Jobs.IndexModel
 @{
     ViewData["Title"] = "Jobs";
@@ -6,9 +7,13 @@
 
 <section class="panel">
     <h2>Archive jobs</h2>
+    <p class="muted">Showing the 50 most recent jobs.</p>
     @if (Model.Jobs.Count == 0)
     {
-        <p class="muted">No archive jobs have been recorded yet.</p>
+        <div class="empty-state">
+            <h3>No archive jobs yet</h3>
+            <p>Jobs will appear here when a configured channel goes live or a manual archive is triggered.</p>
+        </div>
     }
     else
     {
@@ -27,10 +32,19 @@
             {
                 <tr>
                     <td>@job.ChannelConfiguration.TwitchLogin</td>
-                    <td>@job.Status</td>
+                    <td><span class="badge @UiBadges.JobStatusBadgeClass(job.Status)">@UiBadges.JobStatusLabel(job.Status)</span></td>
                     <td>@job.TriggerSource</td>
-                    <td>@job.CreatedUtc.ToString("u")</td>
-                    <td>@(job.LastError ?? "-")</td>
+                    <td><span class="mono">@job.CreatedUtc.ToString("u")</span></td>
+                    <td>
+                        @if (job.LastError is not null)
+                        {
+                            <span class="mono">@job.LastError</span>
+                        }
+                        else
+                        {
+                            @:-
+                        }
+                    </td>
                 </tr>
             }
             </tbody>

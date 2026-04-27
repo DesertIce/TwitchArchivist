@@ -9,6 +9,9 @@
     <p class="muted">The service encountered an unexpected request-processing error.</p>
     @if (!string.IsNullOrWhiteSpace(Model.RequestId))
     {
-        <p>Request ID: <code>@Model.RequestId</code></p>
+        <p>Request ID: <span class="mono">@Model.RequestId</span></p>
     }
+    <p class="actions">
+        <a class="button-link" asp-page="/Index">Back to dashboard</a>
+    </p>
 </section>

@@ -5,6 +5,7 @@
 }
 
 <section class="panel">
+    <p class="muted"><a asp-page="/Channels/Index">← Channels</a></p>
     <h2>Edit channel mapping</h2>
     <div asp-validation-summary="ModelOnly"></div>
 
@@ -15,19 +16,21 @@
                 <label asp-for="Input.TwitchLogin"></label>
                 <input asp-for="Input.TwitchLogin" />
                 <span asp-validation-for="Input.TwitchLogin"></span>
+                <p class="field-hint">The lowercase Twitch username, without the URL or @@ symbol.</p>
             </div>
             <div>
                 <label asp-for="Input.OutputDirectory"></label>
                 <input asp-for="Input.OutputDirectory" />
                 <span asp-validation-for="Input.OutputDirectory"></span>
+                <p class="field-hint">Absolute path to the folder where downloaded VODs will be stored. Example: <span class="mono">D:\twitch\archive\&lt;channel&gt;</span></p>
             </div>
         </div>
-        <div style="margin-top:1rem;">
+        <div>
             <label><input asp-for="Input.IsEnabled" /> Enabled</label>
         </div>
         <div class="actions">
             <button type="submit">Save changes</button>
-            <a class="button-link" asp-page="/Channels/Index">Back</a>
+            <a class="button-ghost" asp-page="/Channels/Index">Back</a>
         </div>
     </form>
 </section>

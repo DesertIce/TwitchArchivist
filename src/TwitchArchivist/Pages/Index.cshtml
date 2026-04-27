@@ -1,5 +1,6 @@
 @page
 @model TwitchArchivist.Pages.IndexModel
+@using TwitchArchivist.Pages
 @{
     ViewData["Title"] = "Dashboard";
 }
@@ -25,23 +26,18 @@
             <div class="metric">@(Model.RuntimeStatus.DatabaseReady ? "Ready" : "Starting")</div>
         </div>
     </div>
+    <div class="heartbeat" id="runtime-relative"></div>
 </section>
 
 <section class="panel">
-    <h2>Diagnostics</h2>
-    <p><strong>Downloader:</strong> <span class="badge @(Model.RuntimeStatus.DownloaderExecutableValid ? "" : "warn")">@Model.DownloaderStatusLabel</span></p>
-    <p class="muted" id="runtime-diagnostics-message">@Model.RuntimeStatus.DiagnosticsMessage</p>
-    <p><strong>EventSub:</strong> <span class="badge warn" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></p>
+    <h2>Status</h2>
+    <p><strong>Downloader:</strong> <span class="badge @(Model.RuntimeStatus.DownloaderExecutableValid ? "success" : "warn")">@Model.DownloaderStatusLabel</span></p>
+    <p><strong>EventSub:</strong> <span class="badge @UiBadges.EventSubBadgeClass(Model.RuntimeStatus.EventSubConnectionState)" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></p>
     <p><strong>Twitch OAuth:</strong> <span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.TwitchAuthorizationStatusLabel</span></p>
-    <p class="muted" id="runtime-twitch-detail">
-        @(Model.RuntimeStatus.TwitchUserAuthorizationConfigured
-            ? Model.TwitchAuthorizationDetail
-            : "Authorize a Twitch user token so EventSub WebSocket subscriptions can be created.")
-    </p>
-    <p class="muted" id="runtime-twitch-user">@(Model.RuntimeStatus.TwitchUserAuthorizationLogin is null ? string.Empty : $"Authorized as {Model.RuntimeStatus.TwitchUserAuthorizationLogin}")</p>
-    <p class="muted" id="runtime-twitch-expires">@(Model.RuntimeStatus.TwitchUserAuthorizationExpiresUtc?.ToString("u") ?? string.Empty)</p>
+    <p class="muted" id="runtime-twitch-detail">@Model.TwitchAuthorizationDetail</p>
     <p>
-        <a class="button-link" href="/auth/twitch/start">Start or re-run Twitch authorization</a>
+        <a class="button-link" href="/auth/twitch/start">Authorize Twitch</a>
+        <a class="button-link button-ghost" asp-page="/Diagnostics/Index">Open diagnostics →</a>
     </p>
 </section>
 
@@ -49,7 +45,10 @@
     <h2>Recent jobs</h2>
     @if (Model.RecentJobs.Count == 0)
     {
-        <p class="muted">No archive jobs have been recorded yet.</p>
+        <div class="empty-state">
+            <h3>No jobs yet</h3>
+            <p>Archive jobs will appear here once a configured channel goes live.</p>
+        </div>
     }
     else
     {
@@ -67,9 +66,18 @@
             {
                 <tr>
                     <td>@job.ChannelConfiguration.TwitchLogin</td>
-                    <td>@job.Status</td>
-                    <td>@job.CreatedUtc.ToString("u")</td>
-                    <td>@(job.OutputPath ?? "-")</td>
+                    <td><span class="badge @UiBadges.JobStatusBadgeClass(job.Status)">@UiBadges.JobStatusLabel(job.Status)</span></td>
+                    <td><span class="mono">@job.CreatedUtc.ToString("u")</span></td>
+                    <td>
+                        @if (job.OutputPath is null)
+                        {
+                            <text>-</text>
+                        }
+                        else
+                        {
+                            <span class="mono">@job.OutputPath</span>
+                        }
+                    </td>
                 </tr>
             }
             </tbody>
