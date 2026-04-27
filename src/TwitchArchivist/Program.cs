@@ -41,13 +41,6 @@ if (!app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseRouting();
 
-app.MapGet("/", () => Results.Json(new
-{
-    service = "TwitchArchivist",
-    status = "ok",
-    environment = app.Environment.EnvironmentName
-}));
-
 app.MapGet("/healthz", (RuntimeStatusStore runtimeStatusStore) => Results.Ok(new
 {
     status = "healthy",

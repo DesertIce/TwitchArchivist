@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
 
@@ -53,8 +54,10 @@ public class TwitchAccessTokenProvider(
 
     private sealed class TokenResponse
     {
+        [JsonPropertyName("access_token")]
         public string AccessToken { get; set; } = string.Empty;
 
+        [JsonPropertyName("expires_in")]
         public int ExpiresIn { get; set; }
     }
 }

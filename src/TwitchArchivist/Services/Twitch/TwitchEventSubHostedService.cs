@@ -33,21 +33,35 @@ public class TwitchEventSubHostedService(
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        eventSubWebsocketClient.WebsocketConnected -= OnWebsocketConnectedAsync;
+        eventSubWebsocketClient.WebsocketDisconnected -= OnWebsocketDisconnectedAsync;
+        eventSubWebsocketClient.WebsocketReconnected -= OnWebsocketReconnectedAsync;
+        eventSubWebsocketClient.ErrorOccurred -= OnErrorOccurredAsync;
+        eventSubWebsocketClient.StreamOnline -= OnStreamOnlineAsync;
+        eventSubWebsocketClient.StreamOffline -= OnStreamOfflineAsync;
         await eventSubWebsocketClient.DisconnectAsync();
     }
 
     private async Task ConnectIfConfiguredAsync(CancellationToken cancellationToken)
     {
-        var token = await accessTokenProvider.GetAccessTokenAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(token))
+        try
         {
-            runtimeStatusStore.UpdateEventSubConnectionState("not-configured");
-            logger.LogInformation("Skipping EventSub websocket connection because Twitch credentials are not configured");
-            return;
-        }
+            var token = await accessTokenProvider.GetAccessTokenAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                runtimeStatusStore.UpdateEventSubConnectionState("not-configured");
+                logger.LogInformation("Skipping EventSub websocket connection because Twitch credentials are not configured");
+                return;
+            }
 
-        runtimeStatusStore.UpdateEventSubConnectionState("connecting");
-        await eventSubWebsocketClient.ConnectAsync(EventSubEndpoint);
+            runtimeStatusStore.UpdateEventSubConnectionState("connecting");
+            await eventSubWebsocketClient.ConnectAsync(EventSubEndpoint);
+        }
+        catch (Exception ex)
+        {
+            runtimeStatusStore.UpdateEventSubConnectionState("error");
+            logger.LogError(ex, "Failed to initialize the EventSub websocket connection");
+        }
     }
 
     private async Task OnWebsocketConnectedAsync(object? sender, WebsocketConnectedArgs args)

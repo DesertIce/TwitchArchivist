@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
 
@@ -23,15 +24,22 @@ public class TwitchHelixClient(
         return response?.Data.FirstOrDefault()?.Id;
     }
 
-    public async Task<string?> GetLatestArchiveVodIdAsync(string broadcasterUserId, CancellationToken cancellationToken)
+    public async Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(
+        string broadcasterUserId,
+        DateTimeOffset? createdAfterUtc,
+        CancellationToken cancellationToken)
     {
         var response = await SendHelixAsync<HelixEnvelope<VideoRecord>>(
-            $"/videos?user_id={Uri.EscapeDataString(broadcasterUserId)}&type=archive&first=1",
+            $"/videos?user_id={Uri.EscapeDataString(broadcasterUserId)}&type=archive&first=5",
             HttpMethod.Get,
             body: null,
             cancellationToken);
 
-        return response?.Data.FirstOrDefault()?.Id;
+        var videos = response?.Data
+            .Select(x => new ArchiveVodRecord(x.Id, x.CreatedAt))
+            .ToList() ?? [];
+
+        return ArchiveVodSelector.SelectLatestEligibleVod(videos, createdAfterUtc);
     }
 
     public async Task<IReadOnlyList<EventSubSubscriptionRecord>> GetEventSubscriptionsAsync(CancellationToken cancellationToken)
@@ -108,27 +116,37 @@ public class TwitchHelixClient(
 
     private sealed class UserRecord
     {
+        [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
     }
 
     private sealed class VideoRecord
     {
+        [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("created_at")]
+        public DateTimeOffset CreatedAt { get; set; }
     }
 
     private sealed class SubscriptionRecord
     {
+        [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
 
+        [JsonPropertyName("type")]
         public string Type { get; set; } = string.Empty;
 
+        [JsonPropertyName("status")]
         public string Status { get; set; } = string.Empty;
 
+        [JsonPropertyName("condition")]
         public SubscriptionCondition Condition { get; set; } = new();
     }
 
     private sealed class SubscriptionCondition
     {
+        [JsonPropertyName("broadcaster_user_id")]
         public string? BroadcasterUserId { get; set; }
     }
 }

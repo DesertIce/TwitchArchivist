@@ -4,7 +4,10 @@ public interface ITwitchHelixClient
 {
     Task<string?> ResolveUserIdAsync(string twitchLogin, CancellationToken cancellationToken);
 
-    Task<string?> GetLatestArchiveVodIdAsync(string broadcasterUserId, CancellationToken cancellationToken);
+    Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(
+        string broadcasterUserId,
+        DateTimeOffset? createdAfterUtc,
+        CancellationToken cancellationToken);
 
     Task<IReadOnlyList<EventSubSubscriptionRecord>> GetEventSubscriptionsAsync(CancellationToken cancellationToken);
 

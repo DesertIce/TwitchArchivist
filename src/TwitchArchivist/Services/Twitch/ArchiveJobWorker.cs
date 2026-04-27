@@ -76,7 +76,14 @@ public class ArchiveJobWorker(
         var vodId = job.VodId;
         if (string.IsNullOrWhiteSpace(vodId))
         {
-            vodId = await WaitForVodIdAsync(job.ChannelConfiguration.TwitchUserId, cancellationToken);
+            var streamSession = await dbContext.StreamSessionStates
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.ChannelConfigurationId == job.ChannelConfigurationId, cancellationToken);
+
+            vodId = await WaitForVodIdAsync(
+                job.ChannelConfiguration.TwitchUserId,
+                streamSession?.LastOnlineUtc,
+                cancellationToken);
             if (string.IsNullOrWhiteSpace(vodId))
             {
                 job.Status = ArchiveJobStatus.Failed;
@@ -101,7 +108,10 @@ public class ArchiveJobWorker(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<string?> WaitForVodIdAsync(string? broadcasterUserId, CancellationToken cancellationToken)
+    private async Task<string?> WaitForVodIdAsync(
+        string? broadcasterUserId,
+        DateTimeOffset? streamStartedAtUtc,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(broadcasterUserId))
         {
@@ -117,10 +127,13 @@ public class ArchiveJobWorker(
 
         for (var attempt = 0; attempt < Math.Max(1, options.VodDiscoveryRetryCount); attempt += 1)
         {
-            var vodId = await twitchHelixClient.GetLatestArchiveVodIdAsync(broadcasterUserId, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(vodId))
+            var vod = await twitchHelixClient.GetLatestArchiveVodAsync(
+                broadcasterUserId,
+                streamStartedAtUtc,
+                cancellationToken);
+            if (!string.IsNullOrWhiteSpace(vod?.Id))
             {
-                return vodId;
+                return vod.Id;
             }
 
             await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, options.VodDiscoveryRetryDelaySeconds)), cancellationToken);

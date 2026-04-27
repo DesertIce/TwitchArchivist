@@ -11,10 +11,11 @@ public class IndexModel(TwitchArchivistDbContext dbContext) : PageModel
 
     public async Task OnGetAsync()
     {
-        Jobs = await dbContext.ArchiveJobs
+        Jobs = (await dbContext.ArchiveJobs
             .Include(x => x.ChannelConfiguration)
+            .ToListAsync())
             .OrderByDescending(x => x.CreatedUtc)
             .Take(50)
-            .ToListAsync();
+            .ToList();
     }
 }

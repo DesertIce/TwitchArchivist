@@ -23,7 +23,6 @@ public class ConfigurationDiagnosticsHostedService(
                     : $"Configured TwitchDownloaderCLI path was not found: {configuredPath}";
 
             runtimeStatusStore.UpdateDownloaderValidation(configuredPath, isValid, message);
-            runtimeStatusStore.UpdateEventSubConnectionState("pending-implementation");
             logger.LogInformation("Configuration diagnostics refreshed");
 
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
