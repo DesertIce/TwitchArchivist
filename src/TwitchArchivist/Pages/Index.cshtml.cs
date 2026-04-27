@@ -25,11 +25,10 @@ public class IndexModel(TwitchArchivistDbContext dbContext, RuntimeStatusStore r
         ChannelCount = await dbContext.ChannelConfigurations.CountAsync();
         EnabledChannelCount = await dbContext.ChannelConfigurations.CountAsync(x => x.IsEnabled);
         JobCount = await dbContext.ArchiveJobs.CountAsync();
-        RecentJobs = (await dbContext.ArchiveJobs
+        RecentJobs = await dbContext.ArchiveJobs
             .Include(x => x.ChannelConfiguration)
-            .ToListAsync())
-            .OrderByDescending(x => x.CreatedUtc)
+            .OrderByDescending(x => x.Id)
             .Take(10)
-            .ToList();
+            .ToListAsync();
     }
 }

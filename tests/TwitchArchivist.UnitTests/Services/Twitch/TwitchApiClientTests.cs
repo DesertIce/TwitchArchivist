@@ -89,6 +89,50 @@ public class TwitchApiClientTests
         Assert.Equal("stream.online", subscription.Type);
     }
 
+    [Fact]
+    public async Task HelixClientSkipsArchiveVideosCreatedBeforeTheCurrentStream()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """
+                {
+                  "data": [
+                    {
+                      "id": "older-vod",
+                      "created_at": "2026-04-27T11:30:00Z"
+                    },
+                    {
+                      "id": "current-vod",
+                      "created_at": "2026-04-27T12:05:00Z"
+                    }
+                  ]
+                }
+                """,
+                Encoding.UTF8,
+                "application/json")
+        });
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.twitch.tv/helix/")
+        };
+        var factory = new StubHttpClientFactory(client);
+        var authProvider = new StubAccessTokenProvider();
+        var options = Options.Create(new TwitchOptions
+        {
+            ClientId = "client-id"
+        });
+
+        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+
+        var vod = await helixClient.GetLatestArchiveVodAsync(
+            "12345",
+            new DateTimeOffset(2026, 4, 27, 12, 0, 0, TimeSpan.Zero),
+            CancellationToken.None);
+
+        Assert.Equal("current-vod", vod?.Id);
+    }
+
     private sealed class StubAccessTokenProvider : ITwitchAccessTokenProvider
     {
         public Task<string?> GetAccessTokenAsync(CancellationToken cancellationToken)
