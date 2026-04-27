@@ -15,8 +15,8 @@ TestResults/
 coverage/
 *.trx
 
-# Logs
-logs/
+# Logs (runtime output only — anchored to repo root so it doesn't match Razor Pages/Logs/ on case-insensitive filesystems)
+/logs/
 *.log
 
 # Local configuration and secrets

@@ -1,0 +1,57 @@
+@page
+@model TwitchArchivist.Pages.Logs.IndexModel
+@{
+    ViewData["Title"] = "Logs";
+}
+
+<section class="panel">
+    <h2>Recent logs</h2>
+    <p class="muted">This buffer is in-memory only and is cleared on process restart.</p>
+
+    <div class="toolbar">
+        <form method="get" class="toolbar-group">
+            <div>
+                <label asp-for="MinimumLevel">Minimum level</label>
+                <select asp-for="MinimumLevel" asp-items="Model.LevelOptions"></select>
+            </div>
+            <button type="submit">Apply filter</button>
+        </form>
+
+        <form method="post">
+            <input type="hidden" asp-for="MinimumLevel" />
+            <button type="submit" class="button-danger" onclick="return confirm('Clear all log entries from the in-memory buffer?');">Clear buffer</button>
+        </form>
+    </div>
+
+    @if (Model.Entries.Count == 0)
+    {
+        <div class="empty-state">
+            <h3>No matching log entries</h3>
+            <p>Try lowering the minimum level or wait for new activity.</p>
+        </div>
+    }
+    else
+    {
+        <div class="log-feed">
+            @foreach (var entry in Model.Entries)
+            {
+                var levelClass = "level-" + entry.Level.ToString().ToLowerInvariant();
+                <article class="log-entry @levelClass">
+                    <div class="log-meta">
+                        <span class="level-pill @levelClass">@entry.Level</span>
+                        <span class="log-time">@entry.TimestampUtc.ToString("u")</span>
+                        <span class="log-cat">@entry.Category</span>
+                    </div>
+                    <pre class="log-message">@entry.Message</pre>
+                    @if (!string.IsNullOrEmpty(entry.Exception))
+                    {
+                        <details class="expandable">
+                            <summary>Show exception</summary>
+                            <pre>@entry.Exception</pre>
+                        </details>
+                    }
+                </article>
+            }
+        </div>
+    }
+</section>
