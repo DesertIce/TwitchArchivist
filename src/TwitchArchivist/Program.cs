@@ -26,6 +26,7 @@ builder.Services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
 builder.Services.AddSingleton<ITwitchDownloaderRunner, TwitchDownloaderRunner>();
 builder.Services.AddTwitchLibEventSubWebsockets();
 builder.Services.AddTwitchArchivistPersistence(builder.Configuration, builder.Environment.ContentRootPath);
+builder.Services.AddHostedService<TwitchAccessTokenRefreshService>();
 builder.Services.AddHostedService<DatabaseInitializationHostedService>();
 builder.Services.AddHostedService<ConfigurationDiagnosticsHostedService>();
 builder.Services.AddHostedService<TwitchEventSubHostedService>();

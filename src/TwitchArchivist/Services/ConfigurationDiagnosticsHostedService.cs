@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
+using TwitchArchivist.Services.Twitch;
 
 namespace TwitchArchivist.Services;
 
@@ -12,7 +13,7 @@ public class ConfigurationDiagnosticsHostedService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var configuredPath = downloaderOptions.Value.ExecutablePath;
+            var configuredPath = DownloaderExecutablePathResolver.Resolve(downloaderOptions.Value.ExecutablePath);
             var hasPath = !string.IsNullOrWhiteSpace(configuredPath);
             var isValid = hasPath && File.Exists(configuredPath);
 

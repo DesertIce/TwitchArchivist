@@ -45,6 +45,7 @@ public class TwitchApiClientTests
         var handler = new StubHttpMessageHandler(request =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("https://api.twitch.tv/helix/eventsub/subscriptions", request.RequestUri?.ToString());
             Assert.Equal("Bearer test-token", request.Headers.Authorization?.ToString());
             Assert.Equal("client-id", request.Headers.GetValues("Client-Id").Single());
 
@@ -131,6 +132,47 @@ public class TwitchApiClientTests
             CancellationToken.None);
 
         Assert.Equal("current-vod", vod?.Id);
+    }
+
+    [Fact]
+    public async Task HelixClientResolvesUsersAgainstHelixPath()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            Assert.Equal("https://api.twitch.tv/helix/users?login=testchannel", request.RequestUri?.ToString());
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "12345"
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.twitch.tv/helix/")
+        };
+        var factory = new StubHttpClientFactory(client);
+        var authProvider = new StubAccessTokenProvider();
+        var options = Options.Create(new TwitchOptions
+        {
+            ClientId = "client-id"
+        });
+
+        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+
+        var userId = await helixClient.ResolveUserIdAsync("testchannel", CancellationToken.None);
+
+        Assert.Equal("12345", userId);
     }
 
     private sealed class StubAccessTokenProvider : ITwitchAccessTokenProvider

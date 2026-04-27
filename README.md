@@ -18,10 +18,54 @@ TwitchArchivist is a Windows-service-oriented ASP.NET Core application that will
 
 ## Local development
 
-The repository currently contains only the baseline scaffold:
-
 1. Restore dependencies with `dotnet restore TwitchArchivist.slnx`
 2. Build with `dotnet build TwitchArchivist.slnx`
 3. Run the web host with `dotnet run --project src/TwitchArchivist`
 
-The host is structured so later iterations can add Windows Service hosting, SQLite persistence, Twitch integration, and downloader orchestration without restructuring the solution.
+## Windows service scripts
+
+The repo includes publish-first PowerShell scripts under `scripts/`:
+
+- `scripts/install-service.ps1`
+- `scripts/update-service.ps1`
+- `scripts/uninstall-service.ps1`
+
+Each script supports `-WhatIf` for dry-run verification.
+
+Typical install:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
+```
+
+Typical update:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\update-service.ps1
+```
+
+Typical uninstall:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1 -RemovePublishDirectory
+```
+
+Defaults:
+
+- Service name: `TwitchArchivist`
+- Publish directory: `%APPDATA%\TwitchArchivist`
+- Build configuration: `Release`
+
+The install and update scripts publish the app before touching the service and preserve any existing `appsettings*.json` files in the publish directory so local operator config is not overwritten during redeploys.
+
+Environment variables:
+
+- `APPDATA`
+  Default install root source. On this machine that resolves to a path like `C:\Users\DesertIce\AppData\Roaming`.
+- `TWITCHARCHIVIST_INSTALL_ROOT`
+  Optional explicit override for the install/publish directory root.
+
+The repo intentionally does not track live `appsettings.json` files anymore. Start from:
+
+- `src/TwitchArchivist/appsettings.example.json`
+- `src/TwitchArchivist/appsettings.Development.example.json`

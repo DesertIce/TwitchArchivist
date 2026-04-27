@@ -10,6 +10,8 @@ public class TwitchOptions
 
     public int AppAccessTokenRefreshBufferMinutes { get; set; } = 5;
 
+    public int AppAccessTokenRefreshPollingIntervalSeconds { get; set; } = 60;
+
     public int VodDiscoveryInitialDelaySeconds { get; set; } = 30;
 
     public int VodDiscoveryRetryCount { get; set; } = 20;

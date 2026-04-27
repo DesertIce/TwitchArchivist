@@ -24,6 +24,8 @@ logs/
 .env.*
 appsettings.Local.json
 appsettings.Development.Local.json
+src/TwitchArchivist/appsettings.json
+src/TwitchArchivist/appsettings.Development.json
 
 # SQLite runtime files
 *.db

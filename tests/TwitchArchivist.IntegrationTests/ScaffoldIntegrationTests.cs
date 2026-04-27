@@ -29,5 +29,6 @@ public class ScaffoldIntegrationTests
         Assert.True(response.IsSuccessStatusCode);
         Assert.Contains("Service overview", payload);
         Assert.Contains("Recent jobs", payload);
+        Assert.Contains("color-scheme: dark", payload);
     }
 }

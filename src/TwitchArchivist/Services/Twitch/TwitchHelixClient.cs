@@ -95,7 +95,8 @@ public class TwitchHelixClient(
 
         var options = twitchOptions.Value;
         var client = httpClientFactory.CreateClient(nameof(TwitchHelixClient));
-        using var request = new HttpRequestMessage(method, new Uri(client.BaseAddress!, relativePath));
+        var normalizedPath = relativePath.TrimStart('/');
+        using var request = new HttpRequestMessage(method, new Uri(client.BaseAddress!, normalizedPath));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("Client-Id", options.ClientId);
 
