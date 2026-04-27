@@ -1,0 +1,36 @@
+bin/
+obj/
+.vs/
+.vscode/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+
+# Build and publish output
+artifacts/
+publish/
+TestResults/
+coverage/
+*.trx
+
+# Logs
+logs/
+*.log
+
+# Local configuration and secrets
+.env
+.env.*
+appsettings.Local.json
+appsettings.Development.Local.json
+
+# SQLite runtime files
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+# Worktree helpers
+.worktrees/
+worktrees/

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TwitchArchivist.Persistence/TwitchArchivist.Persistence.csproj" />
+    <Project Path="src/TwitchArchivist/TwitchArchivist.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TwitchArchivist.IntegrationTests/TwitchArchivist.IntegrationTests.csproj" />
+    <Project Path="tests/TwitchArchivist.UnitTests/TwitchArchivist.UnitTests.csproj" />
+  </Folder>
+</Solution>
