@@ -4,6 +4,14 @@ namespace TwitchArchivist.Services.Twitch;
 
 public static class ArchiveOutputPathBuilder
 {
+    public static string GetChannelFilenamePrefix(string channelName)
+    {
+        var safeChannelName = SanitizeSegment(channelName);
+        return string.IsNullOrWhiteSpace(safeChannelName)
+            ? string.Empty
+            : $"{safeChannelName}-";
+    }
+
     public static string Build(string outputDirectory, string channelName, ArchiveVodRecord vod)
     {
         var safeChannelName = SanitizeSegment(channelName);

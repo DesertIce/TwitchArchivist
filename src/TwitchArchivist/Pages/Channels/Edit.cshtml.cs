@@ -24,7 +24,9 @@ public class EditModel(TwitchArchivistDbContext dbContext) : PageModel
             Id = entity.Id,
             TwitchLogin = entity.TwitchLogin,
             OutputDirectory = entity.OutputDirectory,
-            IsEnabled = entity.IsEnabled
+            IsEnabled = entity.IsEnabled,
+            AutoPruneEnabled = entity.AutoPruneEnabled,
+            AutoPruneVodCount = entity.AutoPruneVodCount
         };
 
         return Page();
@@ -55,6 +57,8 @@ public class EditModel(TwitchArchivistDbContext dbContext) : PageModel
         entity.TwitchLogin = normalizedLogin;
         entity.OutputDirectory = Input.OutputDirectory.Trim();
         entity.IsEnabled = Input.IsEnabled;
+        entity.AutoPruneEnabled = Input.AutoPruneEnabled;
+        entity.AutoPruneVodCount = Input.AutoPruneVodCount;
         entity.UpdatedUtc = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync();
@@ -89,5 +93,12 @@ public class EditModel(TwitchArchivistDbContext dbContext) : PageModel
         public string OutputDirectory { get; set; } = string.Empty;
 
         public bool IsEnabled { get; set; }
+
+        [Display(Name = "Auto prune older VOD files")]
+        public bool AutoPruneEnabled { get; set; }
+
+        [Display(Name = "Keep most recent VOD count")]
+        [Range(1, 1000)]
+        public int AutoPruneVodCount { get; set; } = 10;
     }
 }

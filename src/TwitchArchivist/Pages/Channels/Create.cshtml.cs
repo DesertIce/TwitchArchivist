@@ -36,6 +36,8 @@ public class CreateModel(TwitchArchivistDbContext dbContext) : PageModel
             TwitchLogin = normalizedLogin,
             OutputDirectory = outputDirectory,
             IsEnabled = true,
+            AutoPruneEnabled = Input.AutoPruneEnabled,
+            AutoPruneVodCount = Input.AutoPruneVodCount,
             CreatedUtc = timestamp,
             UpdatedUtc = timestamp
         });
@@ -55,5 +57,12 @@ public class CreateModel(TwitchArchivistDbContext dbContext) : PageModel
         [Required]
         [StringLength(1024)]
         public string OutputDirectory { get; set; } = string.Empty;
+
+        [Display(Name = "Auto prune older VOD files")]
+        public bool AutoPruneEnabled { get; set; }
+
+        [Display(Name = "Keep most recent VOD count")]
+        [Range(1, 1000)]
+        public int AutoPruneVodCount { get; set; } = 10;
     }
 }

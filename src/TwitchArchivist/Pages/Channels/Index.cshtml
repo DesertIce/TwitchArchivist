@@ -31,6 +31,7 @@
                     <th>Twitch login</th>
                     <th>Output directory</th>
                     <th>Enabled</th>
+                    <th>Auto prune</th>
                     <th>Last live</th>
                     <th>Updated</th>
                     <th></th>
@@ -44,6 +45,16 @@
                     <td><span class="mono">@channel.TwitchLogin</span></td>
                     <td><span class="mono">@channel.OutputDirectory</span></td>
                     <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsEnabled)">@(channel.IsEnabled ? "Yes" : "No")</span></td>
+                    <td>
+                        @if (channel.AutoPruneEnabled)
+                        {
+                            <span>Keep @channel.AutoPruneVodCount</span>
+                        }
+                        else
+                        {
+                            <span class="muted">Off</span>
+                        }
+                    </td>
                     <td><span class="mono">@(channel.LastLiveUtc?.ToString("u") ?? "Never")</span></td>
                     <td><span class="mono">@channel.UpdatedUtc.ToString("u")</span></td>
                     <td><a class="button-ghost" asp-page="/Channels/Edit" asp-route-id="@channel.Id">Edit</a></td>

@@ -157,6 +157,23 @@ public class ArchiveJobWorker(
                 job.Id,
                 job.ChannelConfiguration.TwitchLogin,
                 vodId);
+
+            try
+            {
+                await ArchiveFilePruner.PruneSucceededFilesForChannelAsync(
+                    dbContext,
+                    job.ChannelConfiguration,
+                    logger,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Archive job {ArchiveJobId} for channel {ChannelLogin} completed but auto prune failed",
+                    job.Id,
+                    job.ChannelConfiguration.TwitchLogin);
+            }
         }
         else
         {

@@ -4,7 +4,15 @@ namespace TwitchArchivist.Services.Logging;
 
 internal static class LogCategoryFilter
 {
-    private const string EfCoreDatabaseCommandCategory = "Microsoft.EntityFrameworkCore.Database.Command";
+    private static readonly HashSet<string> SuppressedInformationCategories = new(StringComparer.Ordinal)
+    {
+        "Microsoft.EntityFrameworkCore.Database.Command",
+        "System.Net.Http.HttpClient.TwitchAccessTokenProvider.LogicalHandler",
+        "System.Net.Http.HttpClient.TwitchAccessTokenProvider.ClientHandler",
+        "System.Net.Http.HttpClient.TwitchHelixClient.LogicalHandler",
+        "System.Net.Http.HttpClient.TwitchHelixClient.ClientHandler",
+        "TwitchArchivist.Services.ConfigurationDiagnosticsHostedService"
+    };
 
     public static bool ShouldLog(string categoryName, LogLevel logLevel)
     {
@@ -13,7 +21,7 @@ internal static class LogCategoryFilter
             return false;
         }
 
-        if (string.Equals(categoryName, EfCoreDatabaseCommandCategory, StringComparison.Ordinal) &&
+        if (SuppressedInformationCategories.Contains(categoryName) &&
             logLevel < LogLevel.Warning)
         {
             return false;

@@ -12,6 +12,10 @@ public class ChannelConfiguration
 
     public bool IsEnabled { get; set; } = true;
 
+    public bool AutoPruneEnabled { get; set; }
+
+    public int AutoPruneVodCount { get; set; } = 10;
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset UpdatedUtc { get; set; }

@@ -30,6 +30,16 @@
                 <span asp-validation-for="Input.OutputDirectory"></span>
                 <p class="field-hint">Absolute path to the folder where downloaded VODs will be stored. Example: <span class="mono">D:\twitch\archive\&lt;channel&gt;</span></p>
             </div>
+            <div>
+                <label><input asp-for="Input.AutoPruneEnabled" /> @Html.DisplayNameFor(x => x.Input.AutoPruneEnabled)</label>
+                <p class="field-hint">When enabled, older successful VOD files for this mapping are deleted after new downloads complete.</p>
+            </div>
+            <div>
+                <label asp-for="Input.AutoPruneVodCount"></label>
+                <input asp-for="Input.AutoPruneVodCount" type="number" min="1" />
+                <span asp-validation-for="Input.AutoPruneVodCount"></span>
+                <p class="field-hint">How many successful VOD files to retain for this mapping.</p>
+            </div>
         </div>
         <div>
             <label><input asp-for="Input.IsEnabled" /> Enabled</label>
