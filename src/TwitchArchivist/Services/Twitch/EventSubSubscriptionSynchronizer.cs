@@ -6,7 +6,7 @@ namespace TwitchArchivist.Services.Twitch;
 
 public class EventSubSubscriptionSynchronizer(
     ITwitchHelixClient twitchHelixClient,
-    IServiceScopeFactory scopeFactory)
+    IServiceScopeFactory scopeFactory) : IEventSubSubscriptionSynchronizer
 {
     public async Task EnsureSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {

@@ -27,9 +27,11 @@
         <table>
             <thead>
                 <tr>
+                    <th>Live</th>
                     <th>Twitch login</th>
                     <th>Output directory</th>
                     <th>Enabled</th>
+                    <th>Last live</th>
                     <th>Updated</th>
                     <th></th>
                 </tr>
@@ -38,9 +40,11 @@
             @foreach (var channel in Model.Channels)
             {
                 <tr>
+                    <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsLive)">@(channel.IsLive ? "Live" : "Offline")</span></td>
                     <td><span class="mono">@channel.TwitchLogin</span></td>
                     <td><span class="mono">@channel.OutputDirectory</span></td>
                     <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsEnabled)">@(channel.IsEnabled ? "Yes" : "No")</span></td>
+                    <td><span class="mono">@(channel.LastLiveUtc?.ToString("u") ?? "Never")</span></td>
                     <td><span class="mono">@channel.UpdatedUtc.ToString("u")</span></td>
                     <td><a class="button-ghost" asp-page="/Channels/Edit" asp-route-id="@channel.Id">Edit</a></td>
                 </tr>

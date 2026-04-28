@@ -6,6 +6,8 @@ public interface ITwitchHelixClient
 
     Task<IReadOnlyList<TwitchChannelSearchResult>> SearchChannelsAsync(string query, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<TwitchLiveStreamState>> GetLiveStreamsByLoginsAsync(IReadOnlyList<string> twitchLogins, CancellationToken cancellationToken);
+
     Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(
         string broadcasterUserId,
         DateTimeOffset? createdAfterUtc,

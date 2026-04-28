@@ -2,6 +2,8 @@
     var currentPage = (ViewContext.RouteData.Values["page"] as string ?? string.Empty);
     string NavClass(string pagePath) =>
         currentPage.StartsWith(pagePath, StringComparison.OrdinalIgnoreCase) ? "active" : string.Empty;
+    var autoRefreshEnabled = ViewData["AutoRefreshEnabled"] as bool? ?? true;
+    const int autoRefreshDefaultIntervalSeconds = 120;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -72,6 +74,36 @@
             display: flex;
             flex-wrap: wrap;
             gap: 0.4rem;
+        }
+
+        .header-tools {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .header-tool {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
+
+        .header-tool input[type=checkbox] {
+            width: auto;
+            margin: 0;
+            accent-color: var(--accent);
+        }
+
+        .header-tool select {
+            width: auto;
+            min-width: 7rem;
+            padding: 0.35rem 0.55rem;
+            font-size: 0.88rem;
         }
 
         nav a {
@@ -440,8 +472,10 @@
 
         .portal-body {
             padding: 1rem;
-            overflow: auto;
-            display: grid;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
             gap: 0.9rem;
         }
 
@@ -465,8 +499,10 @@
             list-style: none;
             margin: 0;
             padding: 0;
+            min-height: 0;
+            flex: 1 1 auto;
+            overflow: auto;
             border-radius: 0.65rem;
-            overflow: hidden;
             border: 1px solid var(--border);
             background: var(--bg-row);
         }
@@ -715,6 +751,7 @@
         @@media (max-width: 960px) {
             main { padding: 1.25rem 1rem 1.75rem; }
             .header-row { gap: 0.75rem; }
+            .header-tools { margin-left: 0; width: 100%; }
         }
 
         @@media (max-width: 720px) {
@@ -723,7 +760,8 @@
         }
     </style>
 </head>
-<body>
+<body data-auto-refresh-enabled="@autoRefreshEnabled.ToString().ToLowerInvariant()"
+      data-auto-refresh-default-interval-seconds="@autoRefreshDefaultIntervalSeconds">
     <header>
         <div class="header-row">
             <h1>Twitch Archivist</h1>
@@ -734,6 +772,22 @@
                 <a class="@NavClass("/Diagnostics")" asp-page="/Diagnostics/Index">Diagnostics</a>
                 <a class="@NavClass("/Logs")" asp-page="/Logs/Index">Logs</a>
             </nav>
+            <div class="header-tools">
+                <label class="header-tool">
+                    <input type="checkbox" data-auto-refresh-toggle="true" />
+                    <span>Auto refresh</span>
+                </label>
+                <label class="header-tool">
+                    <span>Interval</span>
+                    <select data-auto-refresh-interval="true">
+                        <option value="30">30s</option>
+                        <option value="60">1m</option>
+                        <option value="120">2m</option>
+                        <option value="300">5m</option>
+                        <option value="900">15m</option>
+                    </select>
+                </label>
+            </div>
         </div>
     </header>
     <main>
@@ -782,6 +836,93 @@
                 if (badgeClass) {
                     element.classList.add(badgeClass);
                 }
+            };
+
+            const initAutoRefresh = () => {
+                const { body } = document;
+                if (!body) {
+                    return;
+                }
+
+                const toggle = document.querySelector("[data-auto-refresh-toggle='true']");
+                const intervalSelect = document.querySelector("[data-auto-refresh-interval='true']");
+                if (!(toggle instanceof HTMLInputElement) || !(intervalSelect instanceof HTMLSelectElement)) {
+                    return;
+                }
+
+                const enabledStorageKey = "twitchArchivist.autoRefresh.enabled";
+                const intervalStorageKey = "twitchArchivist.autoRefresh.intervalSeconds";
+                const defaultIntervalSeconds = Number.parseInt(body.dataset.autoRefreshDefaultIntervalSeconds ?? "120", 10);
+
+                const normalizeInterval = value => {
+                    const parsed = Number.parseInt(value ?? "", 10);
+                    return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultIntervalSeconds;
+                };
+
+                const readEnabled = () => {
+                    const persisted = localStorage.getItem("twitchArchivist.autoRefresh.enabled");
+                    return persisted === null ? true : persisted === "true";
+                };
+
+                const readIntervalSeconds = () =>
+                    normalizeInterval(localStorage.getItem("twitchArchivist.autoRefresh.intervalSeconds"));
+
+                const writeEnabled = value => {
+                    localStorage.setItem(enabledStorageKey, value ? "true" : "false");
+                };
+
+                const writeIntervalSeconds = value => {
+                    localStorage.setItem(intervalStorageKey, String(normalizeInterval(value)));
+                };
+
+                const isRefreshPaused = () =>
+                    body.dataset.autoRefreshEnabled !== "true" ||
+                    document.hidden ||
+                    document.querySelector("[data-directory-picker-portal='true']:not([hidden])") !== null;
+
+                const applyControlState = () => {
+                    const enabled = readEnabled();
+                    const intervalSeconds = readIntervalSeconds();
+                    toggle.checked = enabled;
+                    intervalSelect.value = String(intervalSeconds);
+                };
+
+                applyControlState();
+
+                toggle.addEventListener("change", () => {
+                    writeEnabled(toggle.checked);
+                });
+
+                intervalSelect.addEventListener("change", () => {
+                    writeIntervalSeconds(intervalSelect.value);
+                    intervalSelect.value = String(readIntervalSeconds());
+                });
+
+                let nextRefreshAt = Date.now() + readIntervalSeconds() * 1000;
+
+                window.setInterval(() => {
+                    const enabled = readEnabled();
+                    const intervalSeconds = readIntervalSeconds();
+
+                    if (!enabled) {
+                        nextRefreshAt = Date.now() + intervalSeconds * 1000;
+                        return;
+                    }
+
+                    if (Date.now() < nextRefreshAt) {
+                        return;
+                    }
+
+                    if (isRefreshPaused()) {
+                        return;
+                    }
+
+                    window.location.reload();
+                }, 1000);
+
+                window.setInterval(() => {
+                    applyControlState();
+                }, 5000);
             };
 
             const eventSubBadgeClass = state => {
@@ -1140,6 +1281,7 @@
 
             initDirectoryPickers();
             initTwitchLoginAutocomplete();
+            initAutoRefresh();
         })();
     </script>
 </body>

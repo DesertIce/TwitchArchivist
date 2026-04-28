@@ -5,6 +5,7 @@ namespace TwitchArchivist.Services.Twitch;
 
 public sealed class TwitchAccessTokenRefreshService(
     ITwitchAccessTokenProvider accessTokenProvider,
+    ITwitchLiveStateSynchronizer liveStateSynchronizer,
     IOptions<TwitchOptions> twitchOptions,
     ILogger<TwitchAccessTokenRefreshService> logger) : BackgroundService
 {
@@ -36,6 +37,19 @@ public sealed class TwitchAccessTokenRefreshService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to refresh the Twitch user access token");
+            }
+
+            try
+            {
+                await liveStateSynchronizer.SynchronizeAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to poll Helix for current live channel state");
             }
 
             var pollingIntervalSeconds = Math.Max(1, twitchOptions.Value.AppAccessTokenRefreshPollingIntervalSeconds);

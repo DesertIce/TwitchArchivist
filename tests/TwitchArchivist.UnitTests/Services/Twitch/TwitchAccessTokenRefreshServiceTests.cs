@@ -11,6 +11,7 @@ public class TwitchAccessTokenRefreshServiceTests
     public async Task RefreshServicePollsAppAndUserAccessTokensOnInterval()
     {
         var provider = new CountingAccessTokenProvider();
+        var synchronizer = new CountingLiveStateSynchronizer();
         var options = Options.Create(new TwitchOptions
         {
             ClientId = "client-id",
@@ -19,6 +20,7 @@ public class TwitchAccessTokenRefreshServiceTests
         });
         using var service = new TwitchAccessTokenRefreshService(
             provider,
+            synchronizer,
             options,
             NullLogger<TwitchAccessTokenRefreshService>.Instance);
 
@@ -30,6 +32,7 @@ public class TwitchAccessTokenRefreshServiceTests
 
         Assert.True(provider.AppCallCount >= 2, $"Expected at least 2 app-token refresh attempts but saw {provider.AppCallCount}.");
         Assert.True(provider.UserCallCount >= 2, $"Expected at least 2 user-token refresh attempts but saw {provider.UserCallCount}.");
+        Assert.True(synchronizer.CallCount >= 2, $"Expected at least 2 live-state sync attempts but saw {synchronizer.CallCount}.");
     }
 
     private sealed class CountingAccessTokenProvider : ITwitchAccessTokenProvider
@@ -60,5 +63,16 @@ public class TwitchAccessTokenRefreshServiceTests
 
         public Task<TwitchUserAuthorizationState> ValidateUserAuthorizationAsync(CancellationToken cancellationToken)
             => Task.FromResult(new TwitchUserAuthorizationState(false, false, "missing", null, false, null, null, null, null));
+    }
+
+    private sealed class CountingLiveStateSynchronizer : ITwitchLiveStateSynchronizer
+    {
+        public int CallCount { get; private set; }
+
+        public Task SynchronizeAsync(CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.CompletedTask;
+        }
     }
 }

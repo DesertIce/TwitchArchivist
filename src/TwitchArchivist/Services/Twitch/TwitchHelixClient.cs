@@ -44,6 +44,47 @@ public class TwitchHelixClient(
             .ToList() ?? [];
     }
 
+    public async Task<IReadOnlyList<TwitchLiveStreamState>> GetLiveStreamsByLoginsAsync(IReadOnlyList<string> twitchLogins, CancellationToken cancellationToken)
+    {
+        var normalizedLogins = twitchLogins
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalizedLogins.Length == 0)
+        {
+            return [];
+        }
+
+        var liveStreams = new List<TwitchLiveStreamState>();
+        const int batchSize = 100;
+
+        for (var index = 0; index < normalizedLogins.Length; index += batchSize)
+        {
+            var batch = normalizedLogins.Skip(index).Take(batchSize).ToArray();
+            var query = string.Join("&", batch.Select(login => $"user_login={Uri.EscapeDataString(login)}"));
+            var response = await SendHelixAsync<HelixEnvelope<StreamRecord>>(
+                $"/streams?first={batch.Length}&{query}",
+                HttpMethod.Get,
+                body: null,
+                useUserAccessToken: false,
+                cancellationToken);
+
+            if (response?.Data is null)
+            {
+                continue;
+            }
+
+            liveStreams.AddRange(response.Data.Select(x => new TwitchLiveStreamState(
+                x.UserId,
+                x.UserLogin,
+                x.Id,
+                x.StartedAt)));
+        }
+
+        return liveStreams;
+    }
+
     public async Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(
         string broadcasterUserId,
         DateTimeOffset? createdAfterUtc,
@@ -170,6 +211,21 @@ public class TwitchHelixClient(
 
         [JsonPropertyName("condition")]
         public SubscriptionCondition Condition { get; set; } = new();
+    }
+
+    private sealed class StreamRecord
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("user_id")]
+        public string UserId { get; set; } = string.Empty;
+
+        [JsonPropertyName("user_login")]
+        public string UserLogin { get; set; } = string.Empty;
+
+        [JsonPropertyName("started_at")]
+        public DateTimeOffset StartedAt { get; set; }
     }
 
     private sealed class ChannelSearchRecord

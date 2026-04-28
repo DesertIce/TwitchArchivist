@@ -37,9 +37,16 @@ builder.Services.AddSingleton<RuntimeStatusStore>();
 builder.Services.AddSingleton<IArchiveJobQueue, ArchiveJobQueue>();
 builder.Services.AddSingleton<ITwitchAccessTokenProvider, TwitchAccessTokenProvider>();
 builder.Services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
+builder.Services.AddSingleton<ITwitchLiveStateSynchronizer, TwitchLiveStateSynchronizer>();
 builder.Services.AddSingleton<ITwitchDownloaderRunner, TwitchDownloaderRunner>();
-builder.Services.AddSingleton<EventSubSubscriptionSynchronizer>();
+builder.Services.AddSingleton<IEventSubSubscriptionSynchronizer, EventSubSubscriptionSynchronizer>();
 builder.Services.AddTwitchLibEventSubWebsockets();
+builder.Services.AddSingleton<IEventSubWebsocketClient>(serviceProvider =>
+{
+    var adapter = new TwitchLibEventSubWebsocketClientAdapter(serviceProvider.GetRequiredService<TwitchLib.EventSub.Websockets.EventSubWebsocketClient>());
+    adapter.Attach();
+    return adapter;
+});
 builder.Services.AddTwitchArchivistPersistence(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddHostedService<TwitchAccessTokenRefreshService>();
 builder.Services.AddHostedService<DatabaseInitializationHostedService>();

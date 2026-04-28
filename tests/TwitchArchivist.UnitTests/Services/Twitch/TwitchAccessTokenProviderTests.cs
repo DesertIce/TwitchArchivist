@@ -152,6 +152,64 @@ public class TwitchAccessTokenProviderTests
     }
 
     [Fact]
+    public async Task GetUserAccessTokenAsyncRefreshesTokenThatIsInsideUserRefreshBuffer()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await SeedSoonExpiringUserTokenAsync(database.Services, DateTimeOffset.UtcNow.AddMinutes(12));
+
+        var tokenEndpointCalls = 0;
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.ToString() == "https://id.twitch.tv/oauth2/token")
+            {
+                tokenEndpointCalls++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "access_token": "buffer-refreshed-user-token",
+                          "refresh_token": "buffer-refreshed-refresh-token",
+                          "expires_in": 3600,
+                          "token_type": "bearer",
+                          "scope": []
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.ToString() == "https://id.twitch.tv/oauth2/validate")
+            {
+                Assert.Equal("OAuth buffer-refreshed-user-token", request.Headers.Authorization?.ToString());
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "client_id": "client-id",
+                          "login": "immybisou",
+                          "user_id": "1011883719"
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var provider = CreateProvider(database.Services, handler, userRefreshBufferMinutes: 15);
+
+        var token = await provider.GetUserAccessTokenAsync(CancellationToken.None);
+
+        Assert.Equal("buffer-refreshed-user-token", token);
+        Assert.Equal(1, tokenEndpointCalls);
+    }
+
+    [Fact]
     public async Task ValidateUserAuthorizationAsyncReturnsValidStateForStoredToken()
     {
         await using var database = await CreateDatabaseAsync();
@@ -191,13 +249,14 @@ public class TwitchAccessTokenProviderTests
         Assert.NotNull(state.LastValidatedUtc);
     }
 
-    private static TwitchAccessTokenProvider CreateProvider(IServiceProvider services, HttpMessageHandler handler)
+    private static TwitchAccessTokenProvider CreateProvider(IServiceProvider services, HttpMessageHandler handler, int userRefreshBufferMinutes = 15)
     {
         var options = Options.Create(new TwitchOptions
         {
             ClientId = "client-id",
             ClientSecret = "client-secret",
-            AppAccessTokenRefreshBufferMinutes = 5
+            AppAccessTokenRefreshBufferMinutes = 5,
+            UserAccessTokenRefreshBufferMinutes = userRefreshBufferMinutes
         });
 
         return new TwitchAccessTokenProvider(
@@ -239,6 +298,25 @@ public class TwitchAccessTokenProviderTests
             TwitchUserId = "1011883719",
             TwitchUserLogin = "immybisou",
             ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedUtc = DateTimeOffset.UtcNow.AddHours(-1),
+            UpdatedUtc = DateTimeOffset.UtcNow.AddMinutes(-5)
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedSoonExpiringUserTokenAsync(IServiceProvider services, DateTimeOffset expiresUtc)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        dbContext.TwitchOAuthTokens.Add(new TwitchOAuthToken
+        {
+            AccessToken = "soon-expiring-user-token",
+            RefreshToken = "soon-refresh-token",
+            TokenType = "bearer",
+            Scope = string.Empty,
+            TwitchUserId = "1011883719",
+            TwitchUserLogin = "immybisou",
+            ExpiresUtc = expiresUtc,
             CreatedUtc = DateTimeOffset.UtcNow.AddHours(-1),
             UpdatedUtc = DateTimeOffset.UtcNow.AddMinutes(-5)
         });

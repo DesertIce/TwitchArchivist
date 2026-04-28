@@ -111,7 +111,7 @@ public class TwitchAccessTokenProvider(
     public async Task<string?> GetUserAccessTokenAsync(CancellationToken cancellationToken)
     {
         var options = twitchOptions.Value;
-        var refreshThreshold = DateTimeOffset.UtcNow.AddMinutes(Math.Max(1, options.AppAccessTokenRefreshBufferMinutes));
+        var refreshThreshold = DateTimeOffset.UtcNow.AddMinutes(Math.Max(1, options.UserAccessTokenRefreshBufferMinutes));
 
         if (!string.IsNullOrWhiteSpace(_cachedUserToken) && _userTokenExpiresUtc > refreshThreshold)
         {

@@ -2,6 +2,7 @@
 @model TwitchArchivist.Pages.Channels.EditModel
 @{
     ViewData["Title"] = "Edit channel";
+    ViewData["AutoRefreshEnabled"] = false;
 }
 
 <section class="panel">
@@ -36,6 +37,13 @@
         <div class="actions">
             <button type="submit">Save changes</button>
             <a class="button-ghost" asp-page="/Channels/Index">Back</a>
+            <button type="submit"
+                    class="button-danger"
+                    asp-page-handler="Delete"
+                    formnovalidate
+                    onclick="return confirm('Delete this channel mapping and all associated archive history, stream state, and subscription data?');">
+                Delete mapping
+            </button>
         </div>
     </form>
 </section>

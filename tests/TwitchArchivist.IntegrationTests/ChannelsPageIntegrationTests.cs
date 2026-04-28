@@ -2,6 +2,8 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using TwitchArchivist.Persistence;
+using TwitchArchivist.Persistence.Entities;
 using TwitchArchivist.Services;
 using TwitchArchivist.Services.Twitch;
 
@@ -28,6 +30,149 @@ public class ChannelsPageIntegrationTests
         Assert.Contains("data-directory-picker-portal", payload);
         Assert.Contains("data-twitch-login-autocomplete", payload);
         Assert.Contains("data-twitch-login-suggestions", payload);
+    }
+
+    [Fact]
+    public async Task CreatePageRendersScrollableDirectoryPickerLayout()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/channels/create");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Contains(".portal-body {", payload);
+        Assert.Contains("min-height: 0;", payload);
+        Assert.Contains(".portal-list {", payload);
+        Assert.Contains("overflow: auto;", payload);
+    }
+
+    [Fact]
+    public async Task ChannelsPageEnablesAutoRefreshWithDefaultInterval()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/channels");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Contains("data-auto-refresh-enabled=\"true\"", payload);
+        Assert.Contains("data-auto-refresh-default-interval-seconds=\"120\"", payload);
+        Assert.Contains("data-auto-refresh-toggle=\"true\"", payload);
+        Assert.Contains("data-auto-refresh-interval=\"true\"", payload);
+        Assert.Contains("const initAutoRefresh = () => {", payload);
+        Assert.Contains("localStorage.getItem(\"twitchArchivist.autoRefresh.enabled\")", payload);
+        Assert.Contains("localStorage.getItem(\"twitchArchivist.autoRefresh.intervalSeconds\")", payload);
+        Assert.Contains("window.location.reload();", payload);
+    }
+
+    [Fact]
+    public async Task CreatePageDisablesAutoRefresh()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/channels/create");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Contains("data-auto-refresh-enabled=\"false\"", payload);
+        Assert.Contains("data-auto-refresh-default-interval-seconds=\"120\"", payload);
+    }
+
+    [Fact]
+    public async Task EditPageRendersDeleteAction()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory();
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+
+        var channel = new ChannelConfiguration
+        {
+            TwitchLogin = $"delete-me-{Guid.NewGuid():N}",
+            OutputDirectory = @"D:\archive\delete-me",
+            IsEnabled = true,
+            CreatedUtc = DateTimeOffset.UtcNow.AddDays(-1),
+            UpdatedUtc = DateTimeOffset.UtcNow
+        };
+
+        dbContext.ChannelConfigurations.Add(channel);
+        await dbContext.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync($"/channels/edit/{channel.Id}");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Contains("?handler=Delete", payload);
+        Assert.Contains("Delete mapping", payload);
+    }
+
+    [Fact]
+    public async Task ChannelsPageRendersLiveAndLastLiveColumns()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory();
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+
+        var now = DateTimeOffset.Parse("2026-04-28T18:00:00Z");
+
+        var liveLogin = $"alpha-{Guid.NewGuid():N}";
+        var offlineLogin = $"beta-{Guid.NewGuid():N}";
+
+        var liveChannel = new ChannelConfiguration
+        {
+            TwitchLogin = liveLogin,
+            OutputDirectory = @"D:\archive\alpha",
+            IsEnabled = true,
+            CreatedUtc = now.AddDays(-2),
+            UpdatedUtc = now
+        };
+
+        var offlineChannel = new ChannelConfiguration
+        {
+            TwitchLogin = offlineLogin,
+            OutputDirectory = @"D:\archive\beta",
+            IsEnabled = true,
+            CreatedUtc = now.AddDays(-2),
+            UpdatedUtc = now
+        };
+
+        dbContext.ChannelConfigurations.AddRange(liveChannel, offlineChannel);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.StreamSessionStates.AddRange(
+            new StreamSessionState
+            {
+                ChannelConfigurationId = liveChannel.Id,
+                LastOnlineUtc = now.AddMinutes(-15),
+                CreatedUtc = now.AddDays(-1),
+                UpdatedUtc = now
+            },
+            new StreamSessionState
+            {
+                ChannelConfigurationId = offlineChannel.Id,
+                LastOnlineUtc = now.AddHours(-4),
+                LastOfflineUtc = now.AddHours(-2),
+                CreatedUtc = now.AddDays(-1),
+                UpdatedUtc = now
+            });
+
+        await dbContext.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/channels");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Contains("<th>Live</th>", payload);
+        Assert.Contains("<th>Last live</th>", payload);
+        Assert.Contains(">Live</span>", payload);
+        Assert.Contains(">Offline</span>", payload);
+        Assert.Contains("2026-04-28 17:45:00Z", payload);
+        Assert.Contains("2026-04-28 14:00:00Z", payload);
     }
 
     [Fact]
@@ -143,6 +288,9 @@ public class ChannelsPageIntegrationTests
             => throw new NotSupportedException();
 
         public Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(string broadcasterUserId, DateTimeOffset? createdAfterUtc, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<TwitchLiveStreamState>> GetLiveStreamsByLoginsAsync(IReadOnlyList<string> twitchLogins, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
         public Task<string?> ResolveUserIdAsync(string twitchLogin, CancellationToken cancellationToken)

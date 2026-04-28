@@ -61,6 +61,19 @@ public class EditModel(TwitchArchivistDbContext dbContext) : PageModel
         return RedirectToPage("/Channels/Index");
     }
 
+    public async Task<IActionResult> OnPostDeleteAsync()
+    {
+        var entity = await dbContext.ChannelConfigurations.SingleOrDefaultAsync(x => x.Id == Input.Id);
+        if (entity is null)
+        {
+            return NotFound();
+        }
+
+        dbContext.ChannelConfigurations.Remove(entity);
+        await dbContext.SaveChangesAsync();
+        return RedirectToPage("/Channels/Index");
+    }
+
     public class InputModel
     {
         public int Id { get; set; }

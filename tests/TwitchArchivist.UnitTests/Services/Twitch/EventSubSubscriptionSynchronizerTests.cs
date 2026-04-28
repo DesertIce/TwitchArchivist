@@ -109,6 +109,9 @@ public class EventSubSubscriptionSynchronizerTests
         public Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(string broadcasterUserId, DateTimeOffset? createdAfterUtc, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
+        public Task<IReadOnlyList<TwitchLiveStreamState>> GetLiveStreamsByLoginsAsync(IReadOnlyList<string> twitchLogins, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
         public Task<string?> ResolveUserIdAsync(string twitchLogin, CancellationToken cancellationToken)
             => Task.FromResult<string?>("29430843");
 
