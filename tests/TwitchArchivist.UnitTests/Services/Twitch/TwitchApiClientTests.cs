@@ -112,11 +112,13 @@ public class TwitchApiClientTests
                   "data": [
                     {
                       "id": "older-vod",
-                      "created_at": "2026-04-27T11:30:00Z"
+                      "created_at": "2026-04-27T11:30:00Z",
+                      "title": "Older archive"
                     },
                     {
                       "id": "current-vod",
-                      "created_at": "2026-04-27T12:05:00Z"
+                      "created_at": "2026-04-27T12:05:00Z",
+                      "title": "Current archive"
                     }
                   ]
                 }
@@ -143,6 +145,7 @@ public class TwitchApiClientTests
             CancellationToken.None);
 
         Assert.Equal("current-vod", vod?.Id);
+        Assert.Equal("Current archive", vod?.Title);
     }
 
     [Fact]

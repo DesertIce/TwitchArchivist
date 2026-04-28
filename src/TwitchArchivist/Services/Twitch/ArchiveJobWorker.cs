@@ -79,6 +79,7 @@ public class ArchiveJobWorker(
         job.AttemptCount += 1;
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        ArchiveVodRecord? vod = null;
         var vodId = job.VodId;
         if (string.IsNullOrWhiteSpace(vodId))
         {
@@ -100,13 +101,13 @@ public class ArchiveJobWorker(
                 job.CreatedUtc,
                 createdAfterUtc);
 
-            vodId = await WaitForVodIdAsync(
+            vod = await WaitForVodAsync(
                 job.ChannelConfiguration.TwitchUserId,
                 createdAfterUtc,
                 job.Id,
                 job.ChannelConfiguration.TwitchLogin,
                 cancellationToken);
-            if (string.IsNullOrWhiteSpace(vodId))
+            if (string.IsNullOrWhiteSpace(vod?.Id))
             {
                 job.Status = ArchiveJobStatus.Failed;
                 job.LastError = "No VOD was discoverable after the configured retry window.";
@@ -119,6 +120,7 @@ public class ArchiveJobWorker(
                 return;
             }
 
+            vodId = vod.Id;
             job.VodId = vodId;
             logger.LogInformation(
                 "Archive job {ArchiveJobId} for channel {ChannelLogin} matched VOD {VodId}",
@@ -128,7 +130,12 @@ public class ArchiveJobWorker(
         }
 
         job.Status = ArchiveJobStatus.Running;
-        var outputPath = BuildOutputPath(job.ChannelConfiguration.OutputDirectory, vodId);
+        var outputPath = string.IsNullOrWhiteSpace(job.OutputPath)
+            ? BuildOutputPath(
+                job.ChannelConfiguration.OutputDirectory,
+                job.ChannelConfiguration.TwitchLogin,
+                vod ?? new ArchiveVodRecord(vodId, job.CreatedUtc))
+            : job.OutputPath;
         job.OutputPath = outputPath;
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -162,7 +169,7 @@ public class ArchiveJobWorker(
         }
     }
 
-    private async Task<string?> WaitForVodIdAsync(
+    private async Task<ArchiveVodRecord?> WaitForVodAsync(
         string? broadcasterUserId,
         DateTimeOffset? createdAfterUtc,
         int archiveJobId,
@@ -206,7 +213,7 @@ public class ArchiveJobWorker(
                     channelLogin,
                     vod.Id,
                     vod.CreatedAtUtc);
-                return vod.Id;
+                return vod;
             }
 
             await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, options.VodDiscoveryRetryDelaySeconds)), cancellationToken);
@@ -215,24 +222,8 @@ public class ArchiveJobWorker(
         return null;
     }
 
-    private static string BuildOutputPath(string outputDirectory, string vodId)
+    private static string BuildOutputPath(string outputDirectory, string channelName, ArchiveVodRecord vod)
     {
-        var basePath = Path.Combine(outputDirectory, $"{vodId}.mp4");
-        if (!File.Exists(basePath))
-        {
-            return basePath;
-        }
-
-        var counter = 1;
-        while (true)
-        {
-            var candidate = Path.Combine(outputDirectory, $"{vodId}_{counter}.mp4");
-            if (!File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            counter += 1;
-        }
+        return ArchiveOutputPathBuilder.Build(outputDirectory, channelName, vod);
     }
 }

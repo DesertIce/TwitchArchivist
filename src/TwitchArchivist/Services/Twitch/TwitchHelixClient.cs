@@ -98,7 +98,7 @@ public class TwitchHelixClient(
             cancellationToken);
 
         var videos = response?.Data
-            .Select(x => new ArchiveVodRecord(x.Id, x.CreatedAt))
+            .Select(x => new ArchiveVodRecord(x.Id, x.CreatedAt, x.Title))
             .ToList() ?? [];
 
         return ArchiveVodSelector.SelectLatestEligibleVod(videos, createdAfterUtc);
@@ -196,6 +196,9 @@ public class TwitchHelixClient(
 
         [JsonPropertyName("created_at")]
         public DateTimeOffset CreatedAt { get; set; }
+
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
     }
 
     private sealed class SubscriptionRecord

@@ -81,17 +81,31 @@ The app will use the configured client ID and client secret to manage app access
 4. If you also need FFmpeg, upstream documents a built-in helper:
    `TwitchDownloaderCLI.exe ffmpeg --download`
 
-This repo defaults to looking here when `Downloader:ExecutablePath` is blank:
+The app has one downloader setting:
+
+- `Downloader:ExecutablePath`
+
+If that value is blank, the runtime falls back to:
 
 - `%APPDATA%\TwitchDownloaderCLI\TwitchDownloaderCLI.exe`
 
-If you install it somewhere else, set:
+If you install the binary somewhere else, set:
 
 ```json
 "Downloader": {
   "ExecutablePath": "C:\\full\\path\\to\\TwitchDownloaderCLI.exe"
 }
 ```
+
+### How this repo uses the binary
+
+When a completed VOD is ready to archive, the app launches:
+
+```text
+TwitchDownloaderCLI.exe videodownload --id <vodId> -o <outputPath>
+```
+
+The configured path must therefore point to the CLI executable itself, not just the containing folder.
 
 ### Verify the downloader installation
 
@@ -106,6 +120,20 @@ If you rely on the default path, a reasonable manual layout is:
 ```text
 %APPDATA%\TwitchDownloaderCLI\TwitchDownloaderCLI.exe
 ```
+
+### Diagnostics page behavior
+
+The diagnostics page lets you save the downloader path without manually editing JSON:
+
+- Page: `http://localhost:5000/diagnostics`
+- Saved setting: `Downloader:ExecutablePath` in `appsettings.json`
+- Validation behavior: the app runs `TwitchDownloaderCLI.exe --version` and expects a `TwitchDownloaderCLI ...` banner
+
+Important detail:
+
+- The runtime worker supports the `%APPDATA%` fallback when `Downloader:ExecutablePath` is blank.
+- The diagnostics page save form requires an explicit executable path; it does not currently provide a "clear this value and use fallback" action.
+- For Windows Service installs, the path must be valid from the service account's perspective.
 
 ### Notes and constraints
 
