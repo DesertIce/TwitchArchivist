@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TwitchArchivist.Pages.Channels;
 using TwitchArchivist.Persistence;
 using TwitchArchivist.Persistence.Entities;
+using TwitchArchivist.Services.Twitch;
 
 namespace TwitchArchivist.UnitTests.Pages.Channels;
 
@@ -19,7 +20,7 @@ public class ChannelMappingPruneSettingsTests
         {
             await using var scope = database.Services.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
-            var model = new CreateModel(dbContext)
+            var model = new CreateModel(dbContext, new RecordingLiveStateSynchronizer())
             {
                 Input = new CreateModel.InputModel
                 {
@@ -38,6 +39,41 @@ public class ChannelMappingPruneSettingsTests
             var channel = await dbContext.ChannelConfigurations.SingleAsync();
             Assert.True(channel.AutoPruneEnabled);
             Assert.Equal(7, channel.AutoPruneVodCount);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CreateModelRefreshesLiveStateAfterSave()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var outputDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            await using var scope = database.Services.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            var synchronizer = new RecordingLiveStateSynchronizer();
+            var model = new CreateModel(dbContext, synchronizer)
+            {
+                Input = new CreateModel.InputModel
+                {
+                    TwitchLogin = "Alpha",
+                    OutputDirectory = outputDirectory
+                }
+            };
+
+            var result = await model.OnPostAsync();
+
+            var redirect = Assert.IsType<Microsoft.AspNetCore.Mvc.RedirectToPageResult>(result);
+            Assert.Equal("/Channels/Index", redirect.PageName);
+            Assert.Equal(1, synchronizer.CallCount);
         }
         finally
         {
@@ -79,7 +115,7 @@ public class ChannelMappingPruneSettingsTests
             await using (var scope = database.Services.CreateAsyncScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
-                var model = new EditModel(dbContext);
+                var model = new EditModel(dbContext, new RecordingLiveStateSynchronizer());
 
                 var getResult = await model.OnGetAsync(channelId);
                 Assert.IsType<Microsoft.AspNetCore.Mvc.RazorPages.PageResult>(getResult);
@@ -108,6 +144,70 @@ public class ChannelMappingPruneSettingsTests
                 Assert.True(channel.AutoPruneEnabled);
                 Assert.Equal(3, channel.AutoPruneVodCount);
                 Assert.Equal(updatedDirectory, channel.OutputDirectory);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(initialDirectory))
+            {
+                Directory.Delete(initialDirectory, recursive: true);
+            }
+
+            if (Directory.Exists(updatedDirectory))
+            {
+                Directory.Delete(updatedDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task EditModelRefreshesLiveStateAfterSave()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var initialDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var updatedDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            int channelId;
+            await using (var scope = database.Services.CreateAsyncScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+                var channel = new ChannelConfiguration
+                {
+                    TwitchLogin = "alpha",
+                    OutputDirectory = initialDirectory,
+                    IsEnabled = true,
+                    CreatedUtc = DateTimeOffset.UtcNow.AddDays(-2),
+                    UpdatedUtc = DateTimeOffset.UtcNow.AddDays(-1)
+                };
+                dbContext.ChannelConfigurations.Add(channel);
+                await dbContext.SaveChangesAsync();
+                channelId = channel.Id;
+            }
+
+            await using (var scope = database.Services.CreateAsyncScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+                var synchronizer = new RecordingLiveStateSynchronizer();
+                var model = new EditModel(dbContext, synchronizer)
+                {
+                    Input = new EditModel.InputModel
+                    {
+                        Id = channelId,
+                        TwitchLogin = "alpha",
+                        OutputDirectory = updatedDirectory,
+                        IsEnabled = true,
+                        AutoPruneEnabled = false,
+                        AutoPruneVodCount = 10
+                    }
+                };
+
+                var result = await model.OnPostAsync();
+
+                var redirect = Assert.IsType<Microsoft.AspNetCore.Mvc.RedirectToPageResult>(result);
+                Assert.Equal("/Channels/Index", redirect.PageName);
+                Assert.Equal(1, synchronizer.CallCount);
             }
         }
         finally
@@ -156,6 +256,17 @@ public class ChannelMappingPruneSettingsTests
             }
 
             await connection.DisposeAsync();
+        }
+    }
+
+    private sealed class RecordingLiveStateSynchronizer : ITwitchLiveStateSynchronizer
+    {
+        public int CallCount { get; private set; }
+
+        public Task SynchronizeAsync(CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.CompletedTask;
         }
     }
 }

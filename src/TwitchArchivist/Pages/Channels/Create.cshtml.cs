@@ -4,10 +4,13 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using TwitchArchivist.Persistence;
 using TwitchArchivist.Persistence.Entities;
+using TwitchArchivist.Services.Twitch;
 
 namespace TwitchArchivist.Pages.Channels;
 
-public class CreateModel(TwitchArchivistDbContext dbContext) : PageModel
+public class CreateModel(
+    TwitchArchivistDbContext dbContext,
+    ITwitchLiveStateSynchronizer twitchLiveStateSynchronizer) : PageModel
 {
     [BindProperty]
     public InputModel Input { get; set; } = new();
@@ -43,6 +46,7 @@ public class CreateModel(TwitchArchivistDbContext dbContext) : PageModel
         });
 
         await dbContext.SaveChangesAsync();
+        await twitchLiveStateSynchronizer.SynchronizeAsync(HttpContext?.RequestAborted ?? CancellationToken.None);
         return RedirectToPage("/Channels/Index");
     }
 

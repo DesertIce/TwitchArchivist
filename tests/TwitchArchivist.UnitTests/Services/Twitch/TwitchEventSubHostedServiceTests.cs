@@ -1,10 +1,12 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
 using TwitchArchivist.Persistence;
+using TwitchArchivist.Persistence.Entities;
 using TwitchArchivist.Services;
 using TwitchArchivist.Services.Twitch;
 
@@ -13,6 +15,69 @@ namespace TwitchArchivist.UnitTests.Services.Twitch;
 #pragma warning disable CS0067
 public class TwitchEventSubHostedServiceTests
 {
+    [Fact]
+    public async Task StreamOfflineCreatesArchiveJobAndQueuesIt()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await SeedChannelAsync(database.Services, "k3lsb3lls", "1234");
+        var websocketClient = new FakeEventSubWebsocketClient();
+        var archiveJobQueue = new RecordingArchiveJobQueue();
+        var logger = new ListLogger<TwitchEventSubHostedService>();
+        var service = CreateService(
+            database.Services,
+            websocketClient,
+            archiveJobQueue: archiveJobQueue,
+            subscriptionSynchronizer: new CountingSubscriptionSynchronizer(),
+            logger: logger);
+
+        await service.StartAsync(CancellationToken.None);
+        await websocketClient.WaitForConnectCountAsync(1, TimeSpan.FromSeconds(3));
+
+        await websocketClient.TriggerStreamOfflineAsync("k3lsb3lls", "1234");
+
+        await using var scope = database.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var jobs = await dbContext.ArchiveJobs.ToListAsync();
+        Assert.True(jobs.Count == 1, string.Join(Environment.NewLine, logger.Messages));
+        var job = jobs.Single();
+
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Equal("stream.offline", job.TriggerSource);
+        Assert.Equal(ArchiveJobStatus.Pending, job.Status);
+        Assert.Equal("1234", (await dbContext.ChannelConfigurations.SingleAsync()).TwitchUserId);
+        Assert.Equal([job.Id], archiveJobQueue.EnqueuedIds);
+    }
+
+    [Fact]
+    public async Task StreamOfflineDoesNotCreateDuplicateArchiveJobWhenRecentPendingJobExists()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var channelId = await SeedChannelAsync(database.Services, "k3lsb3lls", "1234");
+        await SeedArchiveJobAsync(database.Services, channelId, ArchiveJobStatus.Pending, DateTimeOffset.UtcNow.AddMinutes(-5));
+        var websocketClient = new FakeEventSubWebsocketClient();
+        var archiveJobQueue = new RecordingArchiveJobQueue();
+        var service = CreateService(
+            database.Services,
+            websocketClient,
+            archiveJobQueue: archiveJobQueue,
+            subscriptionSynchronizer: new CountingSubscriptionSynchronizer());
+
+        await service.StartAsync(CancellationToken.None);
+        await websocketClient.WaitForConnectCountAsync(1, TimeSpan.FromSeconds(3));
+
+        await websocketClient.TriggerStreamOfflineAsync("k3lsb3lls", "1234");
+
+        await using var scope = database.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var jobs = await dbContext.ArchiveJobs.OrderBy(x => x.Id).ToListAsync();
+
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Single(jobs);
+        Assert.Empty(archiveJobQueue.EnqueuedIds);
+    }
+
     [Fact]
     public async Task ServiceUsesReconnectPathAfterDisconnectEvent()
     {
@@ -260,6 +325,69 @@ public class TwitchEventSubHostedServiceTests
         return new TestDatabase(provider, connection);
     }
 
+    private static TwitchEventSubHostedService CreateService(
+        IServiceProvider services,
+        IEventSubWebsocketClient websocketClient,
+        IArchiveJobQueue? archiveJobQueue = null,
+        IEventSubSubscriptionSynchronizer? subscriptionSynchronizer = null,
+        ITwitchAccessTokenProvider? accessTokenProvider = null,
+        ILogger<TwitchEventSubHostedService>? logger = null,
+        TimeSpan? monitorInterval = null)
+    {
+        var options = Options.Create(new TwitchOptions
+        {
+            EventSubMonitorIntervalSeconds = 1,
+            EventSubRetryBaseDelaySeconds = 1,
+            EventSubRetryMaxDelaySeconds = 2,
+            EventSubSubscriptionSyncIntervalSeconds = 60
+        });
+
+        return new TwitchEventSubHostedService(
+            websocketClient,
+            accessTokenProvider ?? new StubAccessTokenProvider(),
+            subscriptionSynchronizer ?? new EventSubSubscriptionSynchronizer(new StubTwitchHelixClient(), services.GetRequiredService<IServiceScopeFactory>()),
+            services.GetRequiredService<IServiceScopeFactory>(),
+            archiveJobQueue ?? new NoOpArchiveJobQueue(),
+            new RuntimeStatusStore(),
+            logger ?? NullLogger<TwitchEventSubHostedService>.Instance,
+            options,
+            TimeProvider.System,
+            monitorInterval ?? TimeSpan.FromMilliseconds(50));
+    }
+
+    private static async Task<int> SeedChannelAsync(IServiceProvider services, string login, string twitchUserId)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var channel = new TwitchArchivist.Persistence.Entities.ChannelConfiguration
+        {
+            TwitchLogin = login,
+            TwitchUserId = twitchUserId,
+            OutputDirectory = @"D:\archive\" + login,
+            IsEnabled = true,
+            CreatedUtc = now,
+            UpdatedUtc = now
+        };
+        dbContext.ChannelConfigurations.Add(channel);
+        await dbContext.SaveChangesAsync();
+        return channel.Id;
+    }
+
+    private static async Task SeedArchiveJobAsync(IServiceProvider services, int channelId, ArchiveJobStatus status, DateTimeOffset createdUtc)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        dbContext.ArchiveJobs.Add(new TwitchArchivist.Persistence.Entities.ArchiveJob
+        {
+            ChannelConfigurationId = channelId,
+            TriggerSource = "seed",
+            Status = status,
+            CreatedUtc = createdUtc
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
     private sealed class FakeEventSubWebsocketClient : IEventSubWebsocketClient
     {
         private readonly object _gate = new();
@@ -362,6 +490,14 @@ public class TwitchEventSubHostedServiceTests
             if (Reconnected is not null)
             {
                 await Reconnected.Invoke(this, new EventSubReconnectedEventArgs());
+            }
+        }
+
+        public async Task TriggerStreamOfflineAsync(string broadcasterUserLogin, string broadcasterUserId)
+        {
+            if (StreamOffline is not null)
+            {
+                await StreamOffline.Invoke(this, new EventSubStreamOfflineEventArgs(broadcasterUserLogin, broadcasterUserId));
             }
         }
 
@@ -525,6 +661,46 @@ public class TwitchEventSubHostedServiceTests
         {
             await Task.CompletedTask;
             yield break;
+        }
+    }
+
+    private sealed class RecordingArchiveJobQueue : IArchiveJobQueue
+    {
+        public List<int> EnqueuedIds { get; } = [];
+
+        public ValueTask EnqueueAsync(int archiveJobId, CancellationToken cancellationToken)
+        {
+            EnqueuedIds.Add(archiveJobId);
+            return ValueTask.CompletedTask;
+        }
+
+        public async IAsyncEnumerable<int> ReadAllAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+    }
+
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add($"{logLevel}: {formatter(state, exception)}{(exception is null ? string.Empty : Environment.NewLine + exception)}");
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static NullScope Instance { get; } = new();
+
+            public void Dispose()
+            {
+            }
         }
     }
 

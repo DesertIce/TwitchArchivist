@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TwitchArchivist.Pages.Channels;
 using TwitchArchivist.Persistence;
 using TwitchArchivist.Persistence.Entities;
+using TwitchArchivist.Services.Twitch;
 
 namespace TwitchArchivist.UnitTests.Pages.Channels;
 
@@ -62,7 +63,7 @@ public class EditModelTests
         await using (var scope = database.Services.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
-            var model = new EditModel(dbContext)
+            var model = new EditModel(dbContext, new NoOpLiveStateSynchronizer())
             {
                 Input = new EditModel.InputModel
                 {
@@ -119,5 +120,10 @@ public class EditModelTests
 
             await connection.DisposeAsync();
         }
+    }
+
+    private sealed class NoOpLiveStateSynchronizer : ITwitchLiveStateSynchronizer
+    {
+        public Task SynchronizeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
