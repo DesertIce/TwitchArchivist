@@ -28,6 +28,11 @@ builder.Services.AddSingleton<RollingFileLogStore>(serviceProvider =>
 });
 builder.Services.AddSingleton<ILoggerProvider, RollingFileLoggerProvider>();
 builder.Services.AddSingleton<IFileSystemBrowserService, LocalFileSystemBrowserService>();
+builder.Services.AddSingleton<IDownloaderConfigurationWriter>(serviceProvider =>
+{
+    var environment = serviceProvider.GetRequiredService<IHostEnvironment>();
+    return new AppSettingsDownloaderConfigurationWriter(Path.Combine(environment.ContentRootPath, "appsettings.json"));
+});
 builder.Services.AddHttpClient(nameof(TwitchAccessTokenProvider));
 builder.Services.AddHttpClient(nameof(TwitchHelixClient), client =>
 {
@@ -144,6 +149,26 @@ app.MapGet("/api/filesystem/directories", async (string? path, IFileSystemBrowse
     return Results.Ok(directories.Select(candidate => new FileSystemPathResponse(candidate)));
 });
 
+app.MapGet("/api/filesystem/entries", async (
+    string? path,
+    bool includeFiles,
+    string? searchPattern,
+    IFileSystemBrowserService fileSystemBrowserService,
+    CancellationToken cancellationToken) =>
+{
+    var normalizedPath = path?.Trim() ?? string.Empty;
+    if (string.IsNullOrWhiteSpace(normalizedPath))
+    {
+        return Results.BadRequest(new
+        {
+            error = "A directory path is required."
+        });
+    }
+
+    var entries = await fileSystemBrowserService.GetEntriesAsync(normalizedPath, includeFiles, searchPattern, cancellationToken);
+    return Results.Ok(entries.Select(entry => new FileSystemBrowserEntryResponse(entry.Path, entry.IsDirectory)));
+});
+
 app.MapGet("/auth/twitch/start", (HttpContext httpContext, ITwitchAccessTokenProvider accessTokenProvider) =>
 {
     var state = Convert.ToHexString(Guid.NewGuid().ToByteArray());
@@ -236,3 +261,4 @@ static string BuildTwitchOAuthRedirectUri(HttpRequest request)
 public partial class Program;
 
 internal sealed record FileSystemPathResponse(string Path);
+internal sealed record FileSystemBrowserEntryResponse(string Path, bool IsDirectory);

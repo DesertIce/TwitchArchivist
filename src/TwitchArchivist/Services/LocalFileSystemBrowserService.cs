@@ -41,6 +41,41 @@ public sealed class LocalFileSystemBrowserService : IFileSystemBrowserService
         return Task.FromResult((IReadOnlyList<string>)directories);
     }
 
+    public Task<IReadOnlyList<FileSystemBrowserEntry>> GetEntriesAsync(
+        string path,
+        bool includeFiles,
+        string? searchPattern,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("A directory path is required.", nameof(path));
+        }
+
+        var fullPath = Path.GetFullPath(path);
+        if (!Directory.Exists(fullPath))
+        {
+            return Task.FromResult((IReadOnlyList<FileSystemBrowserEntry>)[]);
+        }
+
+        var entries = new List<FileSystemBrowserEntry>();
+        entries.AddRange(Directory.GetDirectories(fullPath)
+            .OrderBy(candidate => candidate, StringComparer.OrdinalIgnoreCase)
+            .Select(candidate => new FileSystemBrowserEntry(candidate, true)));
+
+        if (includeFiles)
+        {
+            var normalizedPattern = string.IsNullOrWhiteSpace(searchPattern) ? "*" : searchPattern.Trim();
+            entries.AddRange(Directory.GetFiles(fullPath, normalizedPattern)
+                .OrderBy(candidate => candidate, StringComparer.OrdinalIgnoreCase)
+                .Select(candidate => new FileSystemBrowserEntry(candidate, false)));
+        }
+
+        return Task.FromResult((IReadOnlyList<FileSystemBrowserEntry>)entries);
+    }
+
     private static string EnsureTrailingSeparator(string path)
     {
         if (string.IsNullOrWhiteSpace(path))

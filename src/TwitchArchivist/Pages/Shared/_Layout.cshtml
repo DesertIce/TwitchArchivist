@@ -349,6 +349,13 @@
             font-size: 0.92em;
         }
 
+        .diagnostics-message {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
+        }
+
         .badge {
             display: inline-block;
             border-radius: 999px;
@@ -815,6 +822,28 @@
             </div>
         </div>
     </div>
+    <div class="portal-backdrop" data-file-picker-portal="true" hidden>
+        <div class="portal-dialog" role="dialog" aria-modal="true" aria-labelledby="file-picker-title">
+            <div class="portal-header">
+                <h3 id="file-picker-title">Select TwitchDownloaderCLI executable</h3>
+                <p class="field-hint">Browse the server-visible filesystem and choose the `TwitchDownloaderCLI.exe` file.</p>
+            </div>
+            <div class="portal-body">
+                <div class="portal-toolbar">
+                    <button type="button" class="button-ghost" data-file-picker-roots="true">Roots</button>
+                    <button type="button" class="button-ghost" data-file-picker-up="true">Up</button>
+                </div>
+                <div class="portal-path" data-file-picker-current-path="true"></div>
+                <p class="field-hint error" data-file-picker-error="true" hidden></p>
+                <ul class="portal-list" data-file-picker-list="true"></ul>
+                <p class="portal-empty" data-file-picker-empty="true" hidden>No matching folders or files found for this location.</p>
+            </div>
+            <div class="portal-footer">
+                <span class="field-hint">Click a folder to open it, or click the executable to select it.</span>
+                <button type="button" class="button-ghost" data-file-picker-close="true">Close</button>
+            </div>
+        </div>
+    </div>
     <script>
         (() => {
             const setText = (id, value, fallback = "") => {
@@ -878,7 +907,8 @@
                 const isRefreshPaused = () =>
                     body.dataset.autoRefreshEnabled !== "true" ||
                     document.hidden ||
-                    document.querySelector("[data-directory-picker-portal='true']:not([hidden])") !== null;
+                    document.querySelector("[data-directory-picker-portal='true']:not([hidden])") !== null ||
+                    document.querySelector("[data-file-picker-portal='true']:not([hidden])") !== null;
 
                 const applyControlState = () => {
                     const enabled = readEnabled();
@@ -969,7 +999,10 @@
             };
 
             const renderRuntimeStatus = payload => {
-                setText("runtime-diagnostics-message", payload.diagnosticsMessage ?? "");
+                const diagnosticsMessage = payload.diagnosticsMessage && payload.diagnosticsMessage.trim().length > 0
+                    ? payload.diagnosticsMessage
+                    : "—";
+                setText("runtime-diagnostics-message", diagnosticsMessage);
                 const eventSubState = payload.eventSubConnectionState ?? "";
                 setText("runtime-eventsub-state", eventSubState);
                 setBadgeClass("runtime-eventsub-state", eventSubBadgeClass(eventSubState));
@@ -1198,6 +1231,200 @@
                 });
             };
 
+            const initFilePickers = () => {
+                const portal = document.querySelector("[data-file-picker-portal='true']");
+                const list = portal?.querySelector("[data-file-picker-list='true']");
+                const rootsButton = portal?.querySelector("[data-file-picker-roots='true']");
+                const upButton = portal?.querySelector("[data-file-picker-up='true']");
+                const closeButton = portal?.querySelector("[data-file-picker-close='true']");
+                const currentPathLabel = portal?.querySelector("[data-file-picker-current-path='true']");
+                const errorLabel = portal?.querySelector("[data-file-picker-error='true']");
+                const emptyLabel = portal?.querySelector("[data-file-picker-empty='true']");
+                if (!(portal instanceof HTMLDivElement) ||
+                    !(list instanceof HTMLUListElement) ||
+                    !(rootsButton instanceof HTMLButtonElement) ||
+                    !(upButton instanceof HTMLButtonElement) ||
+                    !(closeButton instanceof HTMLButtonElement) ||
+                    !(currentPathLabel instanceof HTMLDivElement) ||
+                    !(errorLabel instanceof HTMLParagraphElement) ||
+                    !(emptyLabel instanceof HTMLParagraphElement)) {
+                    return;
+                }
+
+                let activeInput = null;
+                let currentPath = "";
+
+                const setPortalError = message => {
+                    if (!message) {
+                        errorLabel.hidden = true;
+                        errorLabel.textContent = "";
+                        return;
+                    }
+
+                    errorLabel.hidden = false;
+                    errorLabel.textContent = message;
+                };
+
+                const setPortalPath = path => {
+                    currentPath = path ?? "";
+                    currentPathLabel.textContent = currentPath || "Choose a drive or root folder.";
+                };
+
+                const getParentPath = path => {
+                    if (!path) {
+                        return "";
+                    }
+
+                    const normalized = path.replace(/[\\/]+$/, "");
+                    const lastSeparatorIndex = Math.max(normalized.lastIndexOf("\\"), normalized.lastIndexOf("/"));
+                    if (lastSeparatorIndex < 0) {
+                        return "";
+                    }
+
+                    const parent = normalized.slice(0, lastSeparatorIndex + 1);
+                    if (!parent || parent === path) {
+                        return "";
+                    }
+
+                    return parent;
+                };
+
+                const closePortal = () => {
+                    portal.hidden = true;
+                    activeInput = null;
+                    setPortalError("");
+                };
+
+                const renderList = entries => {
+                    list.innerHTML = "";
+                    emptyLabel.hidden = Array.isArray(entries) && entries.length > 0;
+
+                    for (const entry of entries ?? []) {
+                        const item = document.createElement("li");
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "portal-row";
+                        button.innerHTML = entry.isDirectory
+                            ? `<span class="mono">${entry.path}</span><span>Open</span>`
+                            : `<span class="mono">${entry.path}</span><span>Select</span>`;
+                        button.addEventListener("click", async () => {
+                            if (entry.isDirectory) {
+                                await loadEntries(entry.path);
+                                return;
+                            }
+
+                            if (activeInput) {
+                                activeInput.value = entry.path;
+                            }
+
+                            closePortal();
+                        });
+                        item.appendChild(button);
+                        list.appendChild(item);
+                    }
+                };
+
+                const loadRoots = async () => {
+                    setPortalError("");
+                    setPortalPath("");
+                    list.innerHTML = "";
+                    emptyLabel.hidden = true;
+
+                    try {
+                        const response = await fetch("/api/filesystem/roots", { cache: "no-store" });
+                        if (!response.ok) {
+                            setPortalError("Unable to load filesystem roots.");
+                            return;
+                        }
+
+                        const roots = await response.json();
+                        renderList((roots ?? []).map(entry => ({ ...entry, isDirectory: true })));
+                    } catch {
+                        setPortalError("Unable to load filesystem roots.");
+                    }
+                };
+
+                const loadEntries = async path => {
+                    setPortalError("");
+                    setPortalPath(path);
+                    list.innerHTML = "";
+                    emptyLabel.hidden = true;
+
+                    try {
+                        const response = await fetch(`/api/filesystem/entries?path=${encodeURIComponent(path)}&includeFiles=true&searchPattern=${encodeURIComponent("*.exe")}`, {
+                            cache: "no-store"
+                        });
+
+                        if (!response.ok) {
+                            const payload = await response.json().catch(() => null);
+                            setPortalError(payload?.error ?? "Unable to load folders and executables.");
+                            return;
+                        }
+
+                        const entries = await response.json();
+                        renderList(entries);
+                    } catch {
+                        setPortalError("Unable to load folders and executables.");
+                    }
+                };
+
+                document.querySelectorAll("[data-file-picker='true']").forEach(input => {
+                    const button = input.parentElement?.querySelector("[data-file-picker-button='true']");
+                    const status = input.parentElement?.parentElement?.querySelector("[data-file-picker-status='true']");
+                    if (!(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+                        return;
+                    }
+
+                    const setStatus = (message, isError) => {
+                        if (!(status instanceof HTMLParagraphElement)) {
+                            return;
+                        }
+
+                        if (!message) {
+                            status.hidden = true;
+                            status.textContent = "";
+                            status.classList.remove("error");
+                            return;
+                        }
+
+                        status.hidden = false;
+                        status.textContent = message;
+                        status.classList.toggle("error", !!isError);
+                    };
+
+                    button.addEventListener("click", async () => {
+                        setStatus("", false);
+                        activeInput = input;
+                        portal.hidden = false;
+
+                        const initialPath = input.value.trim();
+                        if (initialPath) {
+                            const parentPath = getParentPath(initialPath);
+                            await loadEntries(parentPath || initialPath);
+                        } else {
+                            await loadRoots();
+                        }
+                    });
+                });
+
+                rootsButton.addEventListener("click", loadRoots);
+                upButton.addEventListener("click", async () => {
+                    const parentPath = getParentPath(currentPath);
+                    if (parentPath) {
+                        await loadEntries(parentPath);
+                        return;
+                    }
+
+                    await loadRoots();
+                });
+                closeButton.addEventListener("click", closePortal);
+                portal.addEventListener("click", event => {
+                    if (event.target === portal) {
+                        closePortal();
+                    }
+                });
+            };
+
             const initTwitchLoginAutocomplete = () => {
                 document.querySelectorAll("[data-twitch-login-autocomplete='true']").forEach(input => {
                     if (!(input instanceof HTMLInputElement)) {
@@ -1280,6 +1507,7 @@
             };
 
             initDirectoryPickers();
+            initFilePickers();
             initTwitchLoginAutocomplete();
             initAutoRefresh();
         })();

@@ -66,6 +66,9 @@ public class TwitchApiClientTests
                           "id": "sub-1",
                           "type": "stream.online",
                           "status": "enabled",
+                          "transport": {
+                            "session_id": "session-123"
+                          },
                           "condition": {
                             "broadcaster_user_id": "12345"
                           }
@@ -95,6 +98,7 @@ public class TwitchApiClientTests
         var subscription = Assert.Single(subscriptions);
         Assert.Equal("12345", subscription.BroadcasterUserId);
         Assert.Equal("stream.online", subscription.Type);
+        Assert.Equal("session-123", subscription.TransportSessionId);
     }
 
     [Fact]

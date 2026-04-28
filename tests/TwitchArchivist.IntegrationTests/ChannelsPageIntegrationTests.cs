@@ -311,5 +311,14 @@ public class ChannelsPageIntegrationTests
             => Task.FromResult(directoriesByPath.TryGetValue(path, out var directories)
                 ? directories
                 : (IReadOnlyList<string>)[]);
+
+        public Task<IReadOnlyList<FileSystemBrowserEntry>> GetEntriesAsync(
+            string path,
+            bool includeFiles,
+            string? searchPattern,
+            CancellationToken cancellationToken)
+            => Task.FromResult((IReadOnlyList<FileSystemBrowserEntry>)(directoriesByPath.TryGetValue(path, out var directories)
+                ? directories.Select(directory => new FileSystemBrowserEntry(directory, true)).ToList()
+                : []));
     }
 }

@@ -114,7 +114,7 @@ public class TwitchHelixClient(
             cancellationToken);
 
         return response?.Data
-            .Select(x => new EventSubSubscriptionRecord(x.Id, x.Type, x.Status, x.Condition.BroadcasterUserId))
+            .Select(x => new EventSubSubscriptionRecord(x.Id, x.Type, x.Status, x.Condition.BroadcasterUserId, x.Transport.SessionId))
             .ToList() ?? [];
     }
 
@@ -149,7 +149,7 @@ public class TwitchHelixClient(
         var record = response?.Data.FirstOrDefault()
             ?? throw new InvalidOperationException("Twitch did not return the created EventSub subscription.");
 
-        return new EventSubSubscriptionRecord(record.Id, record.Type, record.Status, record.Condition.BroadcasterUserId);
+        return new EventSubSubscriptionRecord(record.Id, record.Type, record.Status, record.Condition.BroadcasterUserId, record.Transport.SessionId);
     }
 
     private async Task<T?> SendHelixAsync<T>(string relativePath, HttpMethod method, object? body, bool useUserAccessToken, CancellationToken cancellationToken)
@@ -211,6 +211,9 @@ public class TwitchHelixClient(
 
         [JsonPropertyName("condition")]
         public SubscriptionCondition Condition { get; set; } = new();
+
+        [JsonPropertyName("transport")]
+        public SubscriptionTransport Transport { get; set; } = new();
     }
 
     private sealed class StreamRecord
@@ -250,5 +253,11 @@ public class TwitchHelixClient(
     {
         [JsonPropertyName("broadcaster_user_id")]
         public string? BroadcasterUserId { get; set; }
+    }
+
+    private sealed class SubscriptionTransport
+    {
+        [JsonPropertyName("session_id")]
+        public string? SessionId { get; set; }
     }
 }

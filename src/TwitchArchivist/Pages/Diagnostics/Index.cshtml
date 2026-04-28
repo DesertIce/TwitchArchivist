@@ -24,6 +24,34 @@
 </section>
 
 <section class="panel">
+    <h2>Downloader configuration</h2>
+    <p class="muted">Save the full path to the `TwitchDownloaderCLI` executable here instead of editing `appsettings.json` manually.</p>
+
+    @if (string.Equals(Model.SaveStatus, "saved", StringComparison.Ordinal))
+    {
+        <p class="field-hint">Downloader configuration saved.</p>
+    }
+
+    <div asp-validation-summary="ModelOnly"></div>
+
+    <form method="post">
+        <div>
+            <label asp-for="Input.DownloaderExecutablePath"></label>
+            <div class="input-with-button">
+                <input asp-for="Input.DownloaderExecutablePath" class="mono" data-file-picker="true" />
+                <button type="button" class="button-ghost" data-file-picker-button="true">Browse</button>
+            </div>
+            <p class="field-hint" data-file-picker-status="true" hidden></p>
+            <span asp-validation-for="Input.DownloaderExecutablePath"></span>
+            <p class="field-hint">Select the server-visible `TwitchDownloaderCLI.exe` file.</p>
+        </div>
+        <div class="actions">
+            <button type="submit" asp-page-handler="SaveDownloader">Save TwitchDownloaderCLI path</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel">
     <h2>Twitch authorization</h2>
     <dl class="kv-card">
         <dt>Status</dt>
@@ -52,6 +80,6 @@
 
 <section class="panel">
     <h2>Diagnostics message</h2>
-    <p id="runtime-diagnostics-message">@(string.IsNullOrWhiteSpace(Model.RuntimeStatus.DiagnosticsMessage) ? "—" : Model.RuntimeStatus.DiagnosticsMessage)</p>
+    <pre class="diagnostics-message mono" id="runtime-diagnostics-message">@(string.IsNullOrWhiteSpace(Model.RuntimeStatus.DiagnosticsMessage) ? "—" : Model.RuntimeStatus.DiagnosticsMessage)</pre>
     <p class="muted">Last updated <span class="mono" id="runtime-updated-utc">@Model.RuntimeStatus.UpdatedUtc.ToString("u")</span></p>
 </section>

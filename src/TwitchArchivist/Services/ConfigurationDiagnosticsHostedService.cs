@@ -5,7 +5,7 @@ using TwitchArchivist.Services.Twitch;
 namespace TwitchArchivist.Services;
 
 public class ConfigurationDiagnosticsHostedService(
-    IOptions<DownloaderOptions> downloaderOptions,
+    IOptionsMonitor<DownloaderOptions> downloaderOptions,
     ITwitchDownloaderBinaryVerifier twitchDownloaderBinaryVerifier,
     ITwitchAccessTokenProvider accessTokenProvider,
     RuntimeStatusStore runtimeStatusStore,
@@ -15,7 +15,7 @@ public class ConfigurationDiagnosticsHostedService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var configuredPath = DownloaderExecutablePathResolver.Resolve(downloaderOptions.Value.ExecutablePath);
+            var configuredPath = DownloaderExecutablePathResolver.Resolve(downloaderOptions.CurrentValue.ExecutablePath);
             var verification = await twitchDownloaderBinaryVerifier.VerifyAsync(configuredPath, stoppingToken);
             runtimeStatusStore.UpdateDownloaderValidation(configuredPath, verification.IsValid, verification.Message);
 

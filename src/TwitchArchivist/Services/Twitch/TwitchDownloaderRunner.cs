@@ -5,11 +5,11 @@ using TwitchArchivist.Models;
 namespace TwitchArchivist.Services.Twitch;
 
 public class TwitchDownloaderRunner(
-    IOptions<DownloaderOptions> downloaderOptions) : ITwitchDownloaderRunner
+    IOptionsMonitor<DownloaderOptions> downloaderOptions) : ITwitchDownloaderRunner
 {
     public async Task<TwitchDownloaderResult> DownloadVideoAsync(string vodId, string outputPath, CancellationToken cancellationToken)
     {
-        var executablePath = DownloaderExecutablePathResolver.Resolve(downloaderOptions.Value.ExecutablePath);
+        var executablePath = DownloaderExecutablePathResolver.Resolve(downloaderOptions.CurrentValue.ExecutablePath);
         if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
         {
             return new TwitchDownloaderResult(false, -1, string.Empty, "TwitchDownloaderCLI executable path is not configured or does not exist.");

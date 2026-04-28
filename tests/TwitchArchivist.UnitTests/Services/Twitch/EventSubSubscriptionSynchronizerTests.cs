@@ -76,6 +76,56 @@ public class EventSubSubscriptionSynchronizerTests
         }
     }
 
+    [Fact]
+    public async Task EnsureSubscriptionsAsyncCreatesNewSubscriptionsWhenExistingOnesBelongToDifferentSession()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"twitcharchivist-sync-{Guid.NewGuid():N}.db");
+        var services = new ServiceCollection();
+        services.AddDbContext<TwitchArchivistDbContext>(options => options.UseSqlite($"Data Source={databasePath}"));
+        await using var provider = services.BuildServiceProvider();
+
+        try
+        {
+            await using (var scope = provider.CreateAsyncScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+                await dbContext.Database.EnsureCreatedAsync();
+                dbContext.ChannelConfigurations.Add(new ChannelConfiguration
+                {
+                    TwitchLogin = "seretuscumbia",
+                    OutputDirectory = Path.GetTempPath(),
+                    IsEnabled = true,
+                    CreatedUtc = DateTimeOffset.UtcNow,
+                    UpdatedUtc = DateTimeOffset.UtcNow
+                });
+                await dbContext.SaveChangesAsync();
+            }
+
+            var helixClient = new StubTwitchHelixClient
+            {
+                ExistingSubscriptions =
+                [
+                    new EventSubSubscriptionRecord("old-online", "stream.online", "enabled", "29430843", "old-session"),
+                    new EventSubSubscriptionRecord("old-offline", "stream.offline", "enabled", "29430843", "old-session")
+                ]
+            };
+            var synchronizer = new EventSubSubscriptionSynchronizer(
+                helixClient,
+                provider.GetRequiredService<IServiceScopeFactory>());
+
+            await synchronizer.EnsureSubscriptionsAsync("current-session", CancellationToken.None);
+
+            Assert.Equal(2, helixClient.CreatedSubscriptions.Count);
+            Assert.All(helixClient.CreatedSubscriptions, x => Assert.Equal("current-session", x.SessionId));
+        }
+        finally
+        {
+            TryDelete(databasePath);
+            TryDelete($"{databasePath}-wal");
+            TryDelete($"{databasePath}-shm");
+        }
+    }
+
     private static void TryDelete(string path)
     {
         try
@@ -95,16 +145,17 @@ public class EventSubSubscriptionSynchronizerTests
 
     private sealed class StubTwitchHelixClient : ITwitchHelixClient
     {
+        public IReadOnlyList<EventSubSubscriptionRecord> ExistingSubscriptions { get; init; } = [];
         public List<(string SubscriptionType, string BroadcasterUserId, string SessionId)> CreatedSubscriptions { get; } = [];
 
         public Task<EventSubSubscriptionRecord> CreateStreamSubscriptionAsync(string subscriptionType, string broadcasterUserId, string sessionId, CancellationToken cancellationToken)
         {
             CreatedSubscriptions.Add((subscriptionType, broadcasterUserId, sessionId));
-            return Task.FromResult(new EventSubSubscriptionRecord($"sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId));
+            return Task.FromResult(new EventSubSubscriptionRecord($"sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId, sessionId));
         }
 
         public Task<IReadOnlyList<EventSubSubscriptionRecord>> GetEventSubscriptionsAsync(CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<EventSubSubscriptionRecord>>([]);
+            => Task.FromResult(ExistingSubscriptions);
 
         public Task<ArchiveVodRecord?> GetLatestArchiveVodAsync(string broadcasterUserId, DateTimeOffset? createdAfterUtc, CancellationToken cancellationToken)
             => throw new NotSupportedException();

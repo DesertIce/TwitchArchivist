@@ -17,7 +17,7 @@ public sealed class RollingFileLoggerProvider(RollingFileLogStore store, TimePro
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
-        public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+        public bool IsEnabled(LogLevel logLevel) => LogCategoryFilter.ShouldLog(categoryName, logLevel);
 
         public void Log<TState>(
             LogLevel logLevel,
