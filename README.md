@@ -71,11 +71,11 @@ The app will use the configured client ID and client secret to manage app access
 
 ### What it is
 
-`TwitchDownloaderCLI` is the command-line edition of the upstream `lay295/TwitchDownloader` project. Upstream documents it as a Twitch VOD, clip, and chat downloader/renderer. For this repo, the relevant part is the CLI executable that can download VOD output on Windows.
+`TwitchDownloaderCLI` is the command-line edition of the upstream [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader) project. Upstream documents it as a Twitch VOD, clip, and chat downloader/renderer. For this repo, the relevant part is the CLI executable that can download VOD output on Windows.
 
 ### Install on Windows
 
-1. Open the upstream releases page for `lay295/TwitchDownloader`.
+1. Open the upstream releases page for [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader/releases).
 2. Download the latest Windows release archive.
 3. Extract `TwitchDownloaderCLI.exe` to a stable location.
 4. If you also need FFmpeg, upstream documents a built-in helper:
@@ -166,7 +166,9 @@ Defaults:
 - Publish directory: `%APPDATA%\TwitchArchivist`
 - Build configuration: `Release`
 
-The install and update scripts publish the app before touching the service and preserve any existing `appsettings*.json` files in the publish directory so local operator config is not overwritten during redeploys.
+When run from a git checkout, the install and update scripts publish the app before touching the service and preserve any existing `appsettings*.json` files in the publish directory so local operator config is not overwritten during redeploys.
+
+When run from an extracted release bundle that does not include a `.git` directory, the install, update, and uninstall scripts skip build/publish steps and use the extracted bundle root as the default publish directory. Extract the release zip to its long-lived install location before running the scripts in that mode.
 
 ## GitHub releases
 

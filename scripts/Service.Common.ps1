@@ -8,6 +8,11 @@ function Get-RepositoryRoot {
     return Split-Path -Parent $PSScriptRoot
 }
 
+function Test-IsGitCheckout {
+    $repoRoot = Get-RepositoryRoot
+    return Test-Path -LiteralPath (Join-Path $repoRoot ".git")
+}
+
 function Resolve-AbsolutePath {
     param(
         [Parameter(Mandatory)]
@@ -30,6 +35,10 @@ function Get-DefaultProjectPath {
 }
 
 function Get-DefaultPublishDirectory {
+    if (-not (Test-IsGitCheckout)) {
+        return Get-RepositoryRoot
+    }
+
     $installRoot = $env:TWITCHARCHIVIST_INSTALL_ROOT
     if ([string]::IsNullOrWhiteSpace($installRoot)) {
         if ([string]::IsNullOrWhiteSpace($env:APPDATA)) {
@@ -165,6 +174,10 @@ function Invoke-DotNetPublishWithShouldProcess {
         [Parameter(Mandatory)]
         [System.Management.Automation.PSCmdlet]$Cmdlet
     )
+
+    if (-not (Test-IsGitCheckout)) {
+        return
+    }
 
     if ($Cmdlet.ShouldProcess($PublishDirectory, "Publish service binaries from $ProjectPath")) {
         Invoke-DotNetPublish -ProjectPath $ProjectPath -PublishDirectory $PublishDirectory -Configuration $Configuration

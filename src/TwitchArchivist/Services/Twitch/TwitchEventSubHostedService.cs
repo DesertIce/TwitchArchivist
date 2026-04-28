@@ -17,6 +17,7 @@ public class TwitchEventSubHostedService(
     ILogger<TwitchEventSubHostedService> logger) : IHostedService
 {
     private static readonly Uri EventSubEndpoint = new("wss://eventsub.wss.twitch.tv/ws");
+    private const int ArchiveJobRetentionLimitPerChannel = 100;
     private readonly SemaphoreSlim _connectSync = new(1, 1);
     private CancellationTokenSource? _backgroundCancellationTokenSource;
     private Task? _monitorTask;
@@ -277,6 +278,7 @@ public class TwitchEventSubHostedService(
         };
         dbContext.ArchiveJobs.Add(archiveJob);
         await dbContext.SaveChangesAsync();
+        await dbContext.TrimArchiveJobsForChannelAsync(channel.Id, ArchiveJobRetentionLimitPerChannel, CancellationToken.None);
 
         await archiveJobQueue.EnqueueAsync(archiveJob.Id, CancellationToken.None);
     }

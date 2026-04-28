@@ -14,6 +14,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-RepositoryRoot
+$isGitCheckout = Test-IsGitCheckout
 $resolvedProjectPath = Resolve-AbsolutePath -Path $ProjectPath -BasePath $repoRoot
 $resolvedPublishDirectory = if ([string]::IsNullOrWhiteSpace($PublishDirectory)) {
     Get-DefaultPublishDirectory
@@ -23,7 +24,7 @@ else {
 }
 $serviceExecutablePath = Get-ServiceExecutablePath -ProjectPath $resolvedProjectPath -PublishDirectory $resolvedPublishDirectory
 
-if (-not (Test-Path -LiteralPath $resolvedProjectPath) -and -not $WhatIfPreference) {
+if ($isGitCheckout -and -not (Test-Path -LiteralPath $resolvedProjectPath) -and -not $WhatIfPreference) {
     throw "Project file was not found: $resolvedProjectPath"
 }
 
