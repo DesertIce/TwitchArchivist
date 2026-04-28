@@ -59,6 +59,12 @@ public class ArchiveJobWorker(
             return;
         }
 
+        logger.LogInformation(
+            "Processing archive job {ArchiveJobId} for channel {ChannelLogin} with status {Status}",
+            job.Id,
+            job.ChannelConfiguration.TwitchLogin,
+            job.Status);
+
         if (!job.ChannelConfiguration.IsEnabled)
         {
             job.Status = ArchiveJobStatus.Skipped;
@@ -80,9 +86,25 @@ public class ArchiveJobWorker(
                 .AsNoTracking()
                 .SingleOrDefaultAsync(x => x.ChannelConfigurationId == job.ChannelConfigurationId, cancellationToken);
 
+            var now = DateTimeOffset.UtcNow;
+            var createdAfterUtc = ArchiveVodDiscoveryStrategy.ResolveCreatedAfterUtc(
+                streamSession?.LastOnlineUtc,
+                job.CreatedUtc,
+                now);
+            logger.LogInformation(
+                "Archive job {ArchiveJobId} for channel {ChannelLogin} is waiting for a VOD using {DiscoveryMode} lookup; stream started at {StreamStartedAtUtc}, offline detected at {OfflineDetectedAtUtc}, created-after cutoff {CreatedAfterUtc}",
+                job.Id,
+                job.ChannelConfiguration.TwitchLogin,
+                createdAfterUtc is null ? "most-recent-archive" : "stream-start-cutoff",
+                streamSession?.LastOnlineUtc,
+                job.CreatedUtc,
+                createdAfterUtc);
+
             vodId = await WaitForVodIdAsync(
                 job.ChannelConfiguration.TwitchUserId,
-                streamSession?.LastOnlineUtc,
+                createdAfterUtc,
+                job.Id,
+                job.ChannelConfiguration.TwitchLogin,
                 cancellationToken);
             if (string.IsNullOrWhiteSpace(vodId))
             {
@@ -90,10 +112,19 @@ public class ArchiveJobWorker(
                 job.LastError = "No VOD was discoverable after the configured retry window.";
                 job.CompletedUtc = DateTimeOffset.UtcNow;
                 await dbContext.SaveChangesAsync(cancellationToken);
+                logger.LogWarning(
+                    "Archive job {ArchiveJobId} for channel {ChannelLogin} failed because no VOD was discoverable after the configured retry window",
+                    job.Id,
+                    job.ChannelConfiguration.TwitchLogin);
                 return;
             }
 
             job.VodId = vodId;
+            logger.LogInformation(
+                "Archive job {ArchiveJobId} for channel {ChannelLogin} matched VOD {VodId}",
+                job.Id,
+                job.ChannelConfiguration.TwitchLogin,
+                vodId);
         }
 
         job.Status = ArchiveJobStatus.Running;
@@ -101,20 +132,49 @@ public class ArchiveJobWorker(
         job.OutputPath = outputPath;
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        logger.LogInformation(
+            "Archive job {ArchiveJobId} for channel {ChannelLogin} is downloading VOD {VodId} to {OutputPath}",
+            job.Id,
+            job.ChannelConfiguration.TwitchLogin,
+            vodId,
+            outputPath);
         var result = await twitchDownloaderRunner.DownloadVideoAsync(vodId, outputPath, cancellationToken);
         job.Status = result.Succeeded ? ArchiveJobStatus.Succeeded : ArchiveJobStatus.Failed;
         job.LastError = result.Succeeded ? null : string.Join(Environment.NewLine, [result.StandardError, result.StandardOutput]).Trim();
         job.CompletedUtc = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (result.Succeeded)
+        {
+            logger.LogInformation(
+                "Archive job {ArchiveJobId} for channel {ChannelLogin} completed successfully for VOD {VodId}",
+                job.Id,
+                job.ChannelConfiguration.TwitchLogin,
+                vodId);
+        }
+        else
+        {
+            logger.LogError(
+                "Archive job {ArchiveJobId} for channel {ChannelLogin} failed downloading VOD {VodId}: {FailureDetail}",
+                job.Id,
+                job.ChannelConfiguration.TwitchLogin,
+                vodId,
+                job.LastError);
+        }
     }
 
     private async Task<string?> WaitForVodIdAsync(
         string? broadcasterUserId,
-        DateTimeOffset? streamStartedAtUtc,
+        DateTimeOffset? createdAfterUtc,
+        int archiveJobId,
+        string channelLogin,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(broadcasterUserId))
         {
+            logger.LogWarning(
+                "Archive job {ArchiveJobId} for channel {ChannelLogin} cannot discover a VOD because the broadcaster user id is missing",
+                archiveJobId,
+                channelLogin);
             return null;
         }
 
@@ -127,12 +187,25 @@ public class ArchiveJobWorker(
 
         for (var attempt = 0; attempt < Math.Max(1, options.VodDiscoveryRetryCount); attempt += 1)
         {
+            logger.LogInformation(
+                "Archive job {ArchiveJobId} for channel {ChannelLogin} is checking Twitch for a VOD (attempt {Attempt}/{MaxAttempts}, created-after cutoff {CreatedAfterUtc})",
+                archiveJobId,
+                channelLogin,
+                attempt + 1,
+                Math.Max(1, options.VodDiscoveryRetryCount),
+                createdAfterUtc);
             var vod = await twitchHelixClient.GetLatestArchiveVodAsync(
                 broadcasterUserId,
-                streamStartedAtUtc,
+                createdAfterUtc,
                 cancellationToken);
             if (!string.IsNullOrWhiteSpace(vod?.Id))
             {
+                logger.LogInformation(
+                    "Archive job {ArchiveJobId} for channel {ChannelLogin} found VOD {VodId} created at {VodCreatedAtUtc}",
+                    archiveJobId,
+                    channelLogin,
+                    vod.Id,
+                    vod.CreatedAtUtc);
                 return vod.Id;
             }
 

@@ -6,6 +6,7 @@ namespace TwitchArchivist.Services;
 
 public class ConfigurationDiagnosticsHostedService(
     IOptions<DownloaderOptions> downloaderOptions,
+    ITwitchDownloaderBinaryVerifier twitchDownloaderBinaryVerifier,
     ITwitchAccessTokenProvider accessTokenProvider,
     RuntimeStatusStore runtimeStatusStore,
     ILogger<ConfigurationDiagnosticsHostedService> logger) : BackgroundService
@@ -15,16 +16,8 @@ public class ConfigurationDiagnosticsHostedService(
         while (!stoppingToken.IsCancellationRequested)
         {
             var configuredPath = DownloaderExecutablePathResolver.Resolve(downloaderOptions.Value.ExecutablePath);
-            var hasPath = !string.IsNullOrWhiteSpace(configuredPath);
-            var isValid = hasPath && File.Exists(configuredPath);
-
-            var message = !hasPath
-                ? "TwitchDownloaderCLI path is not configured yet."
-                : isValid
-                    ? "TwitchDownloaderCLI path is valid."
-                    : $"Configured TwitchDownloaderCLI path was not found: {configuredPath}";
-
-            runtimeStatusStore.UpdateDownloaderValidation(configuredPath, isValid, message);
+            var verification = await twitchDownloaderBinaryVerifier.VerifyAsync(configuredPath, stoppingToken);
+            runtimeStatusStore.UpdateDownloaderValidation(configuredPath, verification.IsValid, verification.Message);
 
             var authorizationState = await accessTokenProvider.ValidateUserAuthorizationAsync(stoppingToken);
             runtimeStatusStore.UpdateTwitchUserAuthorization(

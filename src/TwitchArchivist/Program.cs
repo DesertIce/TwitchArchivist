@@ -35,6 +35,8 @@ builder.Services.AddHttpClient(nameof(TwitchHelixClient), client =>
 });
 builder.Services.AddSingleton<RuntimeStatusStore>();
 builder.Services.AddSingleton<IArchiveJobQueue, ArchiveJobQueue>();
+builder.Services.AddSingleton<ICommandLineRunner, CommandLineRunner>();
+builder.Services.AddSingleton<ITwitchDownloaderBinaryVerifier, TwitchDownloaderBinaryVerifier>();
 builder.Services.AddSingleton<ITwitchAccessTokenProvider, TwitchAccessTokenProvider>();
 builder.Services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
 builder.Services.AddSingleton<ITwitchLiveStateSynchronizer, TwitchLiveStateSynchronizer>();

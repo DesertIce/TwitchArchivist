@@ -18,6 +18,7 @@ public class TwitchEventSubHostedService(
 {
     private static readonly Uri EventSubEndpoint = new("wss://eventsub.wss.twitch.tv/ws");
     private const int ArchiveJobRetentionLimitPerChannel = 100;
+    private static readonly TimeSpan RecentOfflineJobWindow = TimeSpan.FromHours(6);
     private readonly SemaphoreSlim _connectSync = new(1, 1);
     private readonly TimeSpan _monitorInterval = monitorInterval ?? TimeSpan.FromSeconds(Math.Max(1, twitchOptions.Value.EventSubMonitorIntervalSeconds));
     private readonly TimeSpan _subscriptionSyncInterval = TimeSpan.FromSeconds(Math.Max(1, twitchOptions.Value.EventSubSubscriptionSyncIntervalSeconds));
@@ -240,9 +241,11 @@ public class TwitchEventSubHostedService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
         var login = args.BroadcasterUserLogin.ToLowerInvariant();
+        logger.LogInformation("Received EventSub stream.offline notification for channel {ChannelLogin}", login);
         var channel = await dbContext.ChannelConfigurations.SingleOrDefaultAsync(x => x.TwitchLogin == login);
         if (channel is null)
         {
+            logger.LogWarning("Ignoring stream.offline notification for unknown channel {ChannelLogin}", login);
             return;
         }
 
@@ -263,16 +266,25 @@ public class TwitchEventSubHostedService(
         var now = DateTimeOffset.UtcNow;
         if (state.LastOfflineUtc.HasValue && now - state.LastOfflineUtc.Value < TimeSpan.FromMinutes(10))
         {
+            logger.LogInformation(
+                "Ignoring duplicate stream.offline notification for channel {ChannelLogin}; last offline at {LastOfflineUtc}",
+                channel.TwitchLogin,
+                state.LastOfflineUtc.Value);
             return;
         }
 
+        var recentJobCutoffUtc = now - RecentOfflineJobWindow;
         var recentPendingJobExists = await dbContext.ArchiveJobs.AnyAsync(x =>
             x.ChannelConfigurationId == channel.Id &&
             (x.Status == ArchiveJobStatus.Pending || x.Status == ArchiveJobStatus.WaitingForVod || x.Status == ArchiveJobStatus.Running) &&
-            now - x.CreatedUtc < TimeSpan.FromHours(6));
+            x.CreatedUtc >= recentJobCutoffUtc);
 
         if (recentPendingJobExists)
         {
+            logger.LogInformation(
+                "Skipping archive job creation for channel {ChannelLogin} because a pending job already exists since {RecentJobCutoffUtc}",
+                channel.TwitchLogin,
+                recentJobCutoffUtc);
             return;
         }
 
@@ -291,6 +303,11 @@ public class TwitchEventSubHostedService(
         await dbContext.SaveChangesAsync();
         await dbContext.TrimArchiveJobsForChannelAsync(channel.Id, ArchiveJobRetentionLimitPerChannel, CancellationToken.None);
 
+        logger.LogInformation(
+            "Created archive job {ArchiveJobId} for channel {ChannelLogin} from stream.offline at {OfflineDetectedAtUtc}",
+            archiveJob.Id,
+            channel.TwitchLogin,
+            now);
         await archiveJobQueue.EnqueueAsync(archiveJob.Id, CancellationToken.None);
     }
 
