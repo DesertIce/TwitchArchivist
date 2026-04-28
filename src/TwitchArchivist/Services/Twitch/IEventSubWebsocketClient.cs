@@ -16,9 +16,11 @@ public interface IEventSubWebsocketClient
 
     event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline;
 
-    Task ConnectAsync(Uri endpoint);
+    Task<bool> ConnectAsync(Uri endpoint);
 
-    Task DisconnectAsync();
+    Task<bool> ReconnectAsync();
+
+    Task<bool> DisconnectAsync();
 }
 
 public sealed record EventSubConnectedEventArgs(bool IsRequestedReconnect);

@@ -14,7 +14,7 @@ namespace TwitchArchivist.UnitTests.Services.Twitch;
 public class TwitchEventSubHostedServiceTests
 {
     [Fact]
-    public async Task ServiceDisconnectsClientBeforeReconnectingAfterDisconnectEvent()
+    public async Task ServiceUsesReconnectPathAfterDisconnectEvent()
     {
         await using var database = await CreateDatabaseAsync();
         var websocketClient = new FakeEventSubWebsocketClient();
@@ -44,20 +44,64 @@ public class TwitchEventSubHostedServiceTests
 
         await websocketClient.WaitForConnectCountAsync(1, TimeSpan.FromSeconds(3));
         await websocketClient.TriggerDisconnectedAsync();
-        await websocketClient.WaitForConnectCountAsync(2, TimeSpan.FromSeconds(5));
+        await websocketClient.WaitForReconnectCountAsync(1, TimeSpan.FromSeconds(5));
 
         await service.StopAsync(CancellationToken.None);
 
-        var secondConnectIndex = websocketClient.Operations.IndexOf("connect-2");
-        var resetIndex = websocketClient.Operations.IndexOf("disconnect");
-
-        Assert.True(secondConnectIndex >= 0, "Expected the service to attempt a second websocket connection.");
-        Assert.True(resetIndex >= 0, "Expected the service to reset the websocket client before reconnecting.");
-        Assert.True(resetIndex < secondConnectIndex, $"Expected reset before reconnect. Operations: {string.Join(", ", websocketClient.Operations)}");
+        Assert.Equal(1, websocketClient.ConnectCount);
+        Assert.Equal(1, websocketClient.ReconnectCount);
+        Assert.Contains("reconnect-1", websocketClient.Operations);
     }
 
     [Fact]
-    public async Task ServiceUsesRetryBackoffBetweenFailedConnectAttempts()
+    public async Task ServiceDisconnectsClientBeforeRetryingWhenReconnectHitsStartedSocket()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var websocketClient = new FakeEventSubWebsocketClient
+        {
+            FailNextReconnectWithAlreadyStarted = true
+        };
+        var subscriptionSynchronizer = new EventSubSubscriptionSynchronizer(
+            new StubTwitchHelixClient(),
+            database.Services.GetRequiredService<IServiceScopeFactory>());
+        var options = Options.Create(new TwitchOptions
+        {
+            EventSubMonitorIntervalSeconds = 1,
+            EventSubRetryBaseDelaySeconds = 1,
+            EventSubRetryMaxDelaySeconds = 2,
+            EventSubSubscriptionSyncIntervalSeconds = 60
+        });
+        var service = new TwitchEventSubHostedService(
+            websocketClient,
+            new StubAccessTokenProvider(),
+            subscriptionSynchronizer,
+            database.Services.GetRequiredService<IServiceScopeFactory>(),
+            new NoOpArchiveJobQueue(),
+            new RuntimeStatusStore(),
+            NullLogger<TwitchEventSubHostedService>.Instance,
+            options,
+            TimeProvider.System,
+            TimeSpan.FromMilliseconds(50));
+
+        await service.StartAsync(CancellationToken.None);
+
+        await websocketClient.WaitForConnectCountAsync(1, TimeSpan.FromSeconds(3));
+        await websocketClient.TriggerDisconnectedAsync();
+        await websocketClient.WaitForReconnectCountAsync(2, TimeSpan.FromSeconds(5));
+
+        await service.StopAsync(CancellationToken.None);
+
+        var failedReconnectIndex = websocketClient.Operations.IndexOf("reconnect-failed");
+        var resetIndex = websocketClient.Operations.IndexOf("disconnect");
+        var successfulReconnectIndex = websocketClient.Operations.IndexOf("reconnect-2");
+
+        Assert.True(failedReconnectIndex >= 0, $"Expected a failed reconnect before reset. Operations: {string.Join(", ", websocketClient.Operations)}");
+        Assert.True(resetIndex > failedReconnectIndex, $"Expected reset after the stale-socket failure. Operations: {string.Join(", ", websocketClient.Operations)}");
+        Assert.True(successfulReconnectIndex > resetIndex, $"Expected successful reconnect after reset. Operations: {string.Join(", ", websocketClient.Operations)}");
+    }
+
+    [Fact]
+    public async Task ServiceUsesRetryBackoffBetweenFailedInitialConnectAttempts()
     {
         await using var database = await CreateDatabaseAsync();
         var websocketClient = new AlwaysFailingEventSubWebsocketClient();
@@ -154,12 +198,12 @@ public class TwitchEventSubHostedServiceTests
         await service.StartAsync(CancellationToken.None);
         await websocketClient.WaitForConnectCountAsync(1, TimeSpan.FromSeconds(3));
         await websocketClient.TriggerDisconnectedAsync();
-        await websocketClient.WaitForConnectCountAsync(2, TimeSpan.FromSeconds(3));
+        await websocketClient.WaitForReconnectCountAsync(1, TimeSpan.FromSeconds(3));
         await Task.Delay(100);
         await service.StopAsync(CancellationToken.None);
 
         Assert.True(subscriptionSynchronizer.CallCount >= 2, $"Expected immediate subscription reconcile on reconnect. Calls: {subscriptionSynchronizer.CallCount}");
-        Assert.Contains("session-2", subscriptionSynchronizer.SessionIds);
+        Assert.Contains("session-1-r1", subscriptionSynchronizer.SessionIds);
     }
 
     [Fact]
@@ -219,7 +263,6 @@ public class TwitchEventSubHostedServiceTests
     private sealed class FakeEventSubWebsocketClient : IEventSubWebsocketClient
     {
         private readonly object _gate = new();
-        private TaskCompletionSource<bool> _secondConnectTcs = CreateTcs();
         private bool _started;
 
         public string? SessionId { get; private set; }
@@ -227,6 +270,8 @@ public class TwitchEventSubHostedServiceTests
         public List<string> Operations { get; } = [];
 
         public int ConnectCount { get; private set; }
+        public int ReconnectCount { get; private set; }
+        public bool FailNextReconnectWithAlreadyStarted { get; set; }
 
         public event Func<object?, EventSubConnectedEventArgs, Task>? Connected;
         public event Func<object?, EventSubDisconnectedEventArgs, Task>? Disconnected;
@@ -235,7 +280,7 @@ public class TwitchEventSubHostedServiceTests
         public event Func<object?, EventSubStreamOnlineEventArgs, Task>? StreamOnline;
         public event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline;
 
-        public async Task ConnectAsync(Uri endpoint)
+        public async Task<bool> ConnectAsync(Uri endpoint)
         {
             lock (_gate)
             {
@@ -255,13 +300,40 @@ public class TwitchEventSubHostedServiceTests
                 await Connected.Invoke(this, new EventSubConnectedEventArgs(IsRequestedReconnect: ConnectCount > 1));
             }
 
-            if (ConnectCount >= 2)
-            {
-                _secondConnectTcs.TrySetResult(true);
-            }
+            return true;
         }
 
-        public Task DisconnectAsync()
+        public async Task<bool> ReconnectAsync()
+        {
+            lock (_gate)
+            {
+                ReconnectCount++;
+                if (FailNextReconnectWithAlreadyStarted)
+                {
+                    FailNextReconnectWithAlreadyStarted = false;
+                    Operations.Add("reconnect-failed");
+                    throw new InvalidOperationException("The WebSocket has already been started.");
+                }
+
+                if (_started)
+                {
+                    throw new InvalidOperationException("The WebSocket has already been started.");
+                }
+
+                _started = true;
+                SessionId = $"session-{ConnectCount}-r{ReconnectCount}";
+                Operations.Add($"reconnect-{ReconnectCount}");
+            }
+
+            if (Reconnected is not null)
+            {
+                await Reconnected.Invoke(this, new EventSubReconnectedEventArgs());
+            }
+
+            return true;
+        }
+
+        public Task<bool> DisconnectAsync()
         {
             lock (_gate)
             {
@@ -269,11 +341,16 @@ public class TwitchEventSubHostedServiceTests
                 Operations.Add("disconnect");
             }
 
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public async Task TriggerDisconnectedAsync()
         {
+            lock (_gate)
+            {
+                _started = false;
+            }
+
             if (Disconnected is not null)
             {
                 await Disconnected.Invoke(this, new EventSubDisconnectedEventArgs());
@@ -307,11 +384,55 @@ public class TwitchEventSubHostedServiceTests
             }
 
             using var cancellationTokenSource = new CancellationTokenSource(timeout);
-            await _secondConnectTcs.Task.WaitAsync(cancellationTokenSource.Token);
+            try
+            {
+                await Task.Run(async () =>
+                {
+                    while (!cancellationTokenSource.IsCancellationRequested)
+                    {
+                        if (ConnectCount >= expectedCount)
+                        {
+                            return;
+                        }
+
+                        await Task.Delay(50, cancellationTokenSource.Token);
+                    }
+                }, cancellationTokenSource.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException($"Timed out waiting for connect count {expectedCount}.");
+            }
         }
 
-        private static TaskCompletionSource<bool> CreateTcs()
-            => new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task WaitForReconnectCountAsync(int expectedCount, TimeSpan timeout)
+        {
+            if (ReconnectCount >= expectedCount)
+            {
+                return;
+            }
+
+            using var cancellationTokenSource = new CancellationTokenSource(timeout);
+            try
+            {
+                await Task.Run(async () =>
+                {
+                    while (!cancellationTokenSource.IsCancellationRequested)
+                    {
+                        if (ReconnectCount >= expectedCount)
+                        {
+                            return;
+                        }
+
+                        await Task.Delay(50, cancellationTokenSource.Token);
+                    }
+                }, cancellationTokenSource.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException($"Timed out waiting for reconnect count {expectedCount}.");
+            }
+        }
     }
 
     private sealed class StubAccessTokenProvider : ITwitchAccessTokenProvider
@@ -382,13 +503,19 @@ public class TwitchEventSubHostedServiceTests
         public event Func<object?, EventSubStreamOnlineEventArgs, Task>? StreamOnline;
         public event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline;
 
-        public Task ConnectAsync(Uri endpoint)
+        public Task<bool> ConnectAsync(Uri endpoint)
         {
             ConnectCount++;
             throw new InvalidOperationException("connect failed");
         }
 
-        public Task DisconnectAsync() => Task.CompletedTask;
+        public Task<bool> ReconnectAsync()
+        {
+            ConnectCount++;
+            throw new InvalidOperationException("reconnect failed");
+        }
+
+        public Task<bool> DisconnectAsync() => Task.FromResult(true);
     }
 
     private sealed class NoOpArchiveJobQueue : IArchiveJobQueue

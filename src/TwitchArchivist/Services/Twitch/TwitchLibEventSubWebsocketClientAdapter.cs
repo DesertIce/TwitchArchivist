@@ -20,9 +20,11 @@ public sealed class TwitchLibEventSubWebsocketClientAdapter(EventSubWebsocketCli
 
     public event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline;
 
-    public Task ConnectAsync(Uri endpoint) => innerClient.ConnectAsync(endpoint);
+    public Task<bool> ConnectAsync(Uri endpoint) => innerClient.ConnectAsync(endpoint);
 
-    public Task DisconnectAsync() => innerClient.DisconnectAsync();
+    public Task<bool> ReconnectAsync() => innerClient.ReconnectAsync();
+
+    public Task<bool> DisconnectAsync() => innerClient.DisconnectAsync();
 
     public void Attach()
     {

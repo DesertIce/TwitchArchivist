@@ -24,6 +24,7 @@ public class TwitchEventSubHostedService(
     private CancellationTokenSource? _backgroundCancellationTokenSource;
     private Task? _monitorTask;
     private volatile bool _isConnected;
+    private volatile bool _reconnectRequired;
     private volatile bool _socketResetRequired;
     private int _connectFailureCount;
     private int _subscriptionFailureCount;
@@ -128,13 +129,23 @@ public class TwitchEventSubHostedService(
                 await ResetSocketStateAsync(cancellationToken);
             }
 
-            runtimeStatusStore.UpdateEventSubConnectionState("connecting");
-            await eventSubWebsocketClient.ConnectAsync(EventSubEndpoint);
+            var connectOperation = _reconnectRequired ? "reconnecting" : "connecting";
+            runtimeStatusStore.UpdateEventSubConnectionState(connectOperation);
+            var connectSucceeded = _reconnectRequired
+                ? await eventSubWebsocketClient.ReconnectAsync()
+                : await eventSubWebsocketClient.ConnectAsync(EventSubEndpoint);
+
+            if (!connectSucceeded)
+            {
+                throw new InvalidOperationException($"EventSub websocket {connectOperation} returned false.");
+            }
+
             _connectFailureCount = 0;
             _nextConnectAttemptUtc = DateTimeOffset.MaxValue;
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("already been started", StringComparison.OrdinalIgnoreCase))
         {
+            _reconnectRequired = true;
             _socketResetRequired = true;
             ScheduleNextConnectAttempt();
             runtimeStatusStore.UpdateEventSubConnectionState("error");
@@ -175,6 +186,7 @@ public class TwitchEventSubHostedService(
     private async Task OnWebsocketConnectedAsync(object? sender, EventSubConnectedEventArgs args)
     {
         _isConnected = true;
+        _reconnectRequired = false;
         _socketResetRequired = false;
         _connectFailureCount = 0;
         _nextConnectAttemptUtc = DateTimeOffset.MaxValue;
@@ -285,7 +297,8 @@ public class TwitchEventSubHostedService(
     private Task OnWebsocketDisconnectedAsync(object? sender, EventSubDisconnectedEventArgs args)
     {
         _isConnected = false;
-        _socketResetRequired = true;
+        _reconnectRequired = true;
+        _socketResetRequired = false;
         ScheduleNextConnectAttempt();
         runtimeStatusStore.UpdateEventSubConnectionState("disconnected");
         logger.LogWarning("EventSub websocket disconnected");
@@ -295,6 +308,7 @@ public class TwitchEventSubHostedService(
     private async Task OnWebsocketReconnectedAsync(object? sender, EventSubReconnectedEventArgs args)
     {
         _isConnected = true;
+        _reconnectRequired = false;
         _socketResetRequired = false;
         _connectFailureCount = 0;
         _nextConnectAttemptUtc = DateTimeOffset.MaxValue;
@@ -307,7 +321,8 @@ public class TwitchEventSubHostedService(
     private Task OnErrorOccurredAsync(object? sender, EventSubErrorEventArgs args)
     {
         _isConnected = false;
-        _socketResetRequired = true;
+        _reconnectRequired = true;
+        _socketResetRequired = false;
         ScheduleNextConnectAttempt();
         runtimeStatusStore.UpdateEventSubConnectionState("error");
         logger.LogError(args.Exception, "EventSub websocket error");
