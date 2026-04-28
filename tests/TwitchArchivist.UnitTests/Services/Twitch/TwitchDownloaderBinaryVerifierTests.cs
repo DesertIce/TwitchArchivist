@@ -27,17 +27,18 @@ public class TwitchDownloaderBinaryVerifierTests
         var verifier = new TwitchDownloaderBinaryVerifier(
             new FakeCommandLineRunner(new CommandLineResult(
                 1,
+                string.Empty,
                 """
                 TwitchDownloaderCLI 1.56.4+7e8b587c9c57e660bf53bbdd9bc11ad5d25dc1d8
 
                 Last updated 2026-04-28T16:46:11.0685025+00:00
-                """,
-                string.Empty)));
+                """)));
 
         var result = await verifier.VerifyAsync(executablePath, CancellationToken.None);
 
         Assert.True(result.IsValid);
         Assert.Contains("TwitchDownloaderCLI 1.56.4+", result.Message, StringComparison.Ordinal);
+        Assert.Contains("Last updated 2026-04-28T16:46:11.0685025+00:00", result.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -25,10 +25,12 @@ public sealed class TwitchDownloaderBinaryVerifier(ICommandLineRunner commandLin
         }
 
         var standardOutputLines = SplitOutputLines(result.StandardOutput);
-        var versionBanner = standardOutputLines.FirstOrDefault();
+        var standardErrorLines = SplitOutputLines(result.StandardError);
+        var versionBanner = standardOutputLines
+            .Concat(standardErrorLines)
+            .FirstOrDefault(line => line.StartsWith("TwitchDownloaderCLI ", StringComparison.Ordinal));
 
-        if (string.IsNullOrWhiteSpace(versionBanner) ||
-            !versionBanner.StartsWith("TwitchDownloaderCLI ", StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(versionBanner))
         {
             if (result.ExitCode != 0)
             {
@@ -44,7 +46,8 @@ public sealed class TwitchDownloaderBinaryVerifier(ICommandLineRunner commandLin
                 $"Configured executable did not identify itself as TwitchDownloaderCLI: {detail}");
         }
 
-        return new TwitchDownloaderBinaryVerificationResult(true, BuildVerifiedMessage(versionBanner, standardOutputLines));
+        var detailLines = standardOutputLines.Length > 0 ? standardOutputLines : standardErrorLines;
+        return new TwitchDownloaderBinaryVerificationResult(true, BuildVerifiedMessage(versionBanner, detailLines));
     }
 
     private static string[] SplitOutputLines(string? value)
