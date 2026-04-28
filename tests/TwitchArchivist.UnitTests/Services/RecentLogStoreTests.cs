@@ -20,13 +20,13 @@ public class RecentLogStoreTests
             entries,
             entry =>
             {
-                Assert.Equal(LogLevel.Warning, entry.Level);
-                Assert.Equal("second", entry.Message);
+                Assert.Equal(LogLevel.Error, entry.Level);
+                Assert.Equal("third", entry.Message);
             },
             entry =>
             {
-                Assert.Equal(LogLevel.Error, entry.Level);
-                Assert.Equal("third", entry.Message);
+                Assert.Equal(LogLevel.Warning, entry.Level);
+                Assert.Equal("second", entry.Message);
             });
     }
 
@@ -53,7 +53,24 @@ public class RecentLogStoreTests
 
         Assert.Collection(
             entries,
-            entry => Assert.Equal("info", entry.Message),
-            entry => Assert.Equal("error", entry.Message));
+            entry => Assert.Equal("error", entry.Message),
+            entry => Assert.Equal("info", entry.Message));
+    }
+
+    [Fact]
+    public void GetEntriesReturnsNewestEntriesFirst()
+    {
+        var store = new RecentLogStore(capacity: 10);
+        store.Append(LogLevel.Information, "first", category: "Test");
+        store.Append(LogLevel.Warning, "second", category: "Test");
+        store.Append(LogLevel.Error, "third", category: "Test");
+
+        var entries = store.GetEntries(LogLevel.Trace);
+
+        Assert.Collection(
+            entries,
+            entry => Assert.Equal("third", entry.Message),
+            entry => Assert.Equal("second", entry.Message),
+            entry => Assert.Equal("first", entry.Message));
     }
 }

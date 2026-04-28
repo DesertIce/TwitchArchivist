@@ -12,11 +12,21 @@ builder.Host.UseWindowsService();
 builder.Services.Configure<TwitchOptions>(builder.Configuration.GetSection(TwitchOptions.SectionName));
 builder.Services.Configure<DownloaderOptions>(builder.Configuration.GetSection(DownloaderOptions.SectionName));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+builder.Services.Configure<FileLoggingOptions>(builder.Configuration.GetSection(FileLoggingOptions.SectionName));
 
 builder.Services.AddRouting(options => options.LowercaseUrls = true);
 builder.Services.AddRazorPages();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(new RecentLogStore(capacity: 500));
 builder.Services.AddSingleton<ILoggerProvider, RecentLogLoggerProvider>();
+builder.Services.AddSingleton<RollingFileLogStore>(serviceProvider =>
+{
+    var environment = serviceProvider.GetRequiredService<IHostEnvironment>();
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FileLoggingOptions>>().Value;
+    var directoryPath = Path.GetFullPath(options.DirectoryPath, environment.ContentRootPath);
+    return new RollingFileLogStore(directoryPath, options.FilePrefix, options.RetainedDayCount, serviceProvider.GetRequiredService<TimeProvider>());
+});
+builder.Services.AddSingleton<ILoggerProvider, RollingFileLoggerProvider>();
 builder.Services.AddSingleton<IFileSystemBrowserService, LocalFileSystemBrowserService>();
 builder.Services.AddHttpClient(nameof(TwitchAccessTokenProvider));
 builder.Services.AddHttpClient(nameof(TwitchHelixClient), client =>
@@ -28,6 +38,7 @@ builder.Services.AddSingleton<IArchiveJobQueue, ArchiveJobQueue>();
 builder.Services.AddSingleton<ITwitchAccessTokenProvider, TwitchAccessTokenProvider>();
 builder.Services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
 builder.Services.AddSingleton<ITwitchDownloaderRunner, TwitchDownloaderRunner>();
+builder.Services.AddSingleton<EventSubSubscriptionSynchronizer>();
 builder.Services.AddTwitchLibEventSubWebsockets();
 builder.Services.AddTwitchArchivistPersistence(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddHostedService<TwitchAccessTokenRefreshService>();

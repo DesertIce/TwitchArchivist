@@ -34,6 +34,7 @@ public class RecentLogStore(int capacity)
         {
             return _entries
                 .Where(x => x.Level >= minimumLevel)
+                .Reverse()
                 .ToArray();
         }
     }

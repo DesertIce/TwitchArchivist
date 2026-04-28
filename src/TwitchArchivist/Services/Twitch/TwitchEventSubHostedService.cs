@@ -10,7 +10,7 @@ namespace TwitchArchivist.Services.Twitch;
 public class TwitchEventSubHostedService(
     EventSubWebsocketClient eventSubWebsocketClient,
     ITwitchAccessTokenProvider accessTokenProvider,
-    ITwitchHelixClient twitchHelixClient,
+    EventSubSubscriptionSynchronizer subscriptionSynchronizer,
     IServiceScopeFactory scopeFactory,
     IArchiveJobQueue archiveJobQueue,
     RuntimeStatusStore runtimeStatusStore,
@@ -69,6 +69,7 @@ public class TwitchEventSubHostedService(
         while (!cancellationToken.IsCancellationRequested)
         {
             await ConnectIfConfiguredAsync(cancellationToken);
+            await EnsureSubscriptionsIfConnectedAsync(cancellationToken);
 
             try
             {
@@ -117,6 +118,23 @@ public class TwitchEventSubHostedService(
         }
     }
 
+    private async Task EnsureSubscriptionsIfConnectedAsync(CancellationToken cancellationToken)
+    {
+        if (!_isConnected || string.IsNullOrWhiteSpace(eventSubWebsocketClient.SessionId))
+        {
+            return;
+        }
+
+        try
+        {
+            await subscriptionSynchronizer.EnsureSubscriptionsAsync(eventSubWebsocketClient.SessionId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to reconcile EventSub subscriptions for enabled channels");
+        }
+    }
+
     private async Task OnWebsocketConnectedAsync(object? sender, WebsocketConnectedArgs args)
     {
         _isConnected = true;
@@ -128,68 +146,7 @@ public class TwitchEventSubHostedService(
             return;
         }
 
-        using var scope = scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
-        var channels = await dbContext.ChannelConfigurations.Where(x => x.IsEnabled).ToListAsync();
-        var subscriptions = await twitchHelixClient.GetEventSubscriptionsAsync(CancellationToken.None);
-
-        foreach (var channel in channels)
-        {
-            if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
-            {
-                channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, CancellationToken.None);
-                channel.UpdatedUtc = DateTimeOffset.UtcNow;
-            }
-
-            if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
-            {
-                continue;
-            }
-
-            await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.online");
-            await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.offline");
-        }
-
-        await dbContext.SaveChangesAsync();
-    }
-
-    private async Task EnsureSubscriptionAsync(
-        TwitchArchivistDbContext dbContext,
-        IReadOnlyList<EventSubSubscriptionRecord> remoteSubscriptions,
-        ChannelConfiguration channel,
-        string subscriptionType)
-    {
-        var existing = remoteSubscriptions.FirstOrDefault(x =>
-            string.Equals(x.Type, subscriptionType, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(x.BroadcasterUserId, channel.TwitchUserId, StringComparison.Ordinal));
-
-        if (existing is null)
-        {
-            existing = await twitchHelixClient.CreateStreamSubscriptionAsync(
-                subscriptionType,
-                channel.TwitchUserId!,
-                eventSubWebsocketClient.SessionId,
-                CancellationToken.None);
-        }
-
-        var entity = await dbContext.EventSubscriptionStates
-            .SingleOrDefaultAsync(x => x.ChannelConfigurationId == channel.Id && x.SubscriptionType == subscriptionType);
-
-        if (entity is null)
-        {
-            entity = new EventSubscriptionState
-            {
-                ChannelConfigurationId = channel.Id,
-                SubscriptionType = subscriptionType,
-                CreatedUtc = DateTimeOffset.UtcNow
-            };
-            dbContext.EventSubscriptionStates.Add(entity);
-        }
-
-        entity.TwitchSubscriptionId = existing.Id;
-        entity.Status = existing.Status;
-        entity.LastVerifiedUtc = DateTimeOffset.UtcNow;
-        entity.UpdatedUtc = DateTimeOffset.UtcNow;
+        await subscriptionSynchronizer.EnsureSubscriptionsAsync(eventSubWebsocketClient.SessionId, CancellationToken.None);
     }
 
     private async Task OnStreamOnlineAsync(object? sender, StreamOnlineArgs args)
