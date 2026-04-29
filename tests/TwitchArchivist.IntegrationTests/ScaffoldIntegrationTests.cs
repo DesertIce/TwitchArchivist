@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace TwitchArchivist.IntegrationTests;
 
@@ -51,6 +54,10 @@ public class ScaffoldIntegrationTests
                     ["Twitch:ClientId"] = "client-id",
                     ["Twitch:ClientSecret"] = "client-secret"
                 });
+            });
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IHostedService>();
             });
         });
 

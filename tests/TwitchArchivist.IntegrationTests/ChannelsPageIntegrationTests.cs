@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using TwitchArchivist.Persistence;
 using TwitchArchivist.Persistence.Entities;
 using TwitchArchivist.Services;
@@ -193,6 +194,7 @@ public class ChannelsPageIntegrationTests
         {
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<IHostedService>();
                 services.RemoveAll<ITwitchHelixClient>();
                 services.AddSingleton<ITwitchHelixClient>(new StubTwitchHelixClient(
                 [
