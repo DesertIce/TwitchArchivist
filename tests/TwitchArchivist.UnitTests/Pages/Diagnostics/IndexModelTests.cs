@@ -59,6 +59,35 @@ public class IndexModelTests
         Assert.Null(writer.SavedPath);
     }
 
+    [Fact]
+    public void RuntimeStatusExposesConduitDiagnosticsFields()
+    {
+        var runtimeStatusStore = new RuntimeStatusStore();
+        runtimeStatusStore.UpdateEventSubConduitStatus(
+            "conduit-websocket",
+            "conduit-123",
+            4,
+            3,
+            1,
+            "assign failed",
+            "reconcile failed",
+            new DateTimeOffset(2026, 4, 28, 23, 0, 0, TimeSpan.Zero));
+        var model = new IndexModel(
+            runtimeStatusStore,
+            new FakeDownloaderConfigurationWriter(),
+            new FakeOptionsMonitor(new DownloaderOptions()),
+            new FakeTwitchDownloaderBinaryVerifier());
+
+        Assert.Equal("conduit-websocket", model.RuntimeStatus.EventSubTransportMode);
+        Assert.Equal("conduit-123", model.RuntimeStatus.EventSubConduitId);
+        Assert.Equal(4, model.RuntimeStatus.EventSubConfiguredShardCount);
+        Assert.Equal(3, model.RuntimeStatus.EventSubActiveShardCount);
+        Assert.Equal(1, model.RuntimeStatus.EventSubDisabledShardCount);
+        Assert.Equal("assign failed", model.RuntimeStatus.EventSubLastShardAssignmentError);
+        Assert.Equal("reconcile failed", model.RuntimeStatus.EventSubLastSubscriptionReconcileError);
+        Assert.NotNull(model.RuntimeStatus.EventSubLastRateLimitUtc);
+    }
+
     private sealed class FakeDownloaderConfigurationWriter : IDownloaderConfigurationWriter
     {
         public string? SavedPath { get; private set; }

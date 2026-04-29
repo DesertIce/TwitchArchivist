@@ -4,25 +4,39 @@ using Microsoft.Extensions.Configuration;
 
 namespace TwitchArchivist.IntegrationTests;
 
-internal sealed class IntegrationTestWebApplicationFactory(Action<IWebHostBuilder>? configureBuilder = null)
-    : WebApplicationFactory<Program>
+internal sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly string databasePath = Path.Combine(
-        Path.GetTempPath(),
-        "TwitchArchivist.IntegrationTests",
-        $"{Guid.NewGuid():N}.db");
+    private readonly Action<IWebHostBuilder>? _configureBuilder;
+    private readonly string _databasePath;
+    private readonly IReadOnlyDictionary<string, string?> _configurationOverrides;
+    private readonly bool _ownsDatabasePath;
+
+    public IntegrationTestWebApplicationFactory(
+        Action<IWebHostBuilder>? configureBuilder = null,
+        string? databasePath = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
+    {
+        _configureBuilder = configureBuilder;
+        _databasePath = string.IsNullOrWhiteSpace(databasePath)
+            ? Path.Combine(Path.GetTempPath(), "TwitchArchivist.IntegrationTests", $"{Guid.NewGuid():N}.db")
+            : databasePath;
+        _configurationOverrides = configurationOverrides ?? new Dictionary<string, string?>();
+        _ownsDatabasePath = string.IsNullOrWhiteSpace(databasePath);
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureAppConfiguration((_, configurationBuilder) =>
         {
-            configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>(_configurationOverrides, StringComparer.OrdinalIgnoreCase)
             {
-                ["Storage:DatabasePath"] = databasePath
-            });
+                ["Storage:DatabasePath"] = _databasePath
+            };
+
+            configurationBuilder.AddInMemoryCollection(settings);
         });
 
-        configureBuilder?.Invoke(builder);
+        _configureBuilder?.Invoke(builder);
     }
 
     protected override void Dispose(bool disposing)
@@ -39,9 +53,14 @@ internal sealed class IntegrationTestWebApplicationFactory(Action<IWebHostBuilde
 
     private void DeleteDatabaseFiles()
     {
-        TryDelete(databasePath);
-        TryDelete($"{databasePath}-wal");
-        TryDelete($"{databasePath}-shm");
+        if (!_ownsDatabasePath)
+        {
+            return;
+        }
+
+        TryDelete(_databasePath);
+        TryDelete($"{_databasePath}-wal");
+        TryDelete($"{_databasePath}-shm");
     }
 
     private static void TryDelete(string path)

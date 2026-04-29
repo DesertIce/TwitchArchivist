@@ -20,6 +20,21 @@
 
         <dt>EventSub state</dt>
         <dd><span class="badge @UiBadges.EventSubBadgeClass(Model.RuntimeStatus.EventSubConnectionState)" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></dd>
+
+        <dt>EventSub transport</dt>
+        <dd><span class="mono" id="runtime-eventsub-transport">@Model.RuntimeStatus.EventSubTransportMode</span></dd>
+
+        <dt>EventSub conduit</dt>
+        <dd><span class="mono" id="runtime-eventsub-conduit">@(Model.RuntimeStatus.EventSubConduitId ?? "Not assigned")</span></dd>
+
+        <dt>Configured shards</dt>
+        <dd><span class="mono" id="runtime-eventsub-configured-shards">@Model.RuntimeStatus.EventSubConfiguredShardCount</span></dd>
+
+        <dt>Active shards</dt>
+        <dd><span class="mono" id="runtime-eventsub-active-shards">@Model.RuntimeStatus.EventSubActiveShardCount</span></dd>
+
+        <dt>Disabled shards</dt>
+        <dd><span class="mono" id="runtime-eventsub-disabled-shards">@Model.RuntimeStatus.EventSubDisabledShardCount</span></dd>
     </dl>
 </section>
 
@@ -49,6 +64,20 @@
             <button type="submit" asp-page-handler="SaveDownloader">Save TwitchDownloaderCLI path</button>
         </div>
     </form>
+</section>
+
+<section class="panel">
+    <h2>EventSub conduit diagnostics</h2>
+    <dl class="kv-card">
+        <dt>Last shard assignment error</dt>
+        <dd id="runtime-eventsub-shard-error">@(Model.RuntimeStatus.EventSubLastShardAssignmentError ?? "None")</dd>
+
+        <dt>Last subscription reconcile error</dt>
+        <dd id="runtime-eventsub-reconcile-error">@(Model.RuntimeStatus.EventSubLastSubscriptionReconcileError ?? "None")</dd>
+
+        <dt>Last rate limit</dt>
+        <dd><span class="mono" id="runtime-eventsub-rate-limit">@(Model.RuntimeStatus.EventSubLastRateLimitUtc?.ToString("u") ?? "Never")</span></dd>
+    </dl>
 </section>
 
 <section class="panel">

@@ -12,6 +12,22 @@ public class RuntimeStatusStore
 
     public string EventSubConnectionState { get; private set; } = "not-configured";
 
+    public string EventSubTransportMode { get; private set; } = "websocket";
+
+    public string? EventSubConduitId { get; private set; }
+
+    public int EventSubConfiguredShardCount { get; private set; }
+
+    public int EventSubActiveShardCount { get; private set; }
+
+    public int EventSubDisabledShardCount { get; private set; }
+
+    public string? EventSubLastShardAssignmentError { get; private set; }
+
+    public string? EventSubLastSubscriptionReconcileError { get; private set; }
+
+    public DateTimeOffset? EventSubLastRateLimitUtc { get; private set; }
+
     public bool TwitchUserAuthorizationConfigured { get; private set; }
 
     public bool TwitchUserAuthorizationIsValid { get; private set; }
@@ -45,6 +61,27 @@ public class RuntimeStatusStore
     public void UpdateEventSubConnectionState(string state)
     {
         EventSubConnectionState = state;
+        UpdatedUtc = DateTimeOffset.UtcNow;
+    }
+
+    public void UpdateEventSubConduitStatus(
+        string transportMode,
+        string? conduitId,
+        int configuredShardCount,
+        int activeShardCount,
+        int disabledShardCount,
+        string? lastShardAssignmentError,
+        string? lastSubscriptionReconcileError,
+        DateTimeOffset? lastRateLimitUtc)
+    {
+        EventSubTransportMode = transportMode;
+        EventSubConduitId = conduitId;
+        EventSubConfiguredShardCount = configuredShardCount;
+        EventSubActiveShardCount = activeShardCount;
+        EventSubDisabledShardCount = disabledShardCount;
+        EventSubLastShardAssignmentError = lastShardAssignmentError;
+        EventSubLastSubscriptionReconcileError = lastSubscriptionReconcileError;
+        EventSubLastRateLimitUtc = lastRateLimitUtc;
         UpdatedUtc = DateTimeOffset.UtcNow;
     }
 

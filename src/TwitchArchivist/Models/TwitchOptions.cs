@@ -22,6 +22,16 @@ public class TwitchOptions
 
     public int EventSubRetryMaxDelaySeconds { get; set; } = 60;
 
+    public string EventSubTransportMode { get; set; } = "websocket";
+
+    public int EventSubConduitShardCount { get; set; } = 4;
+
+    public string? EventSubConduitId { get; set; }
+
+    public int EventSubConduitAssignmentTimeoutSeconds { get; set; } = 10;
+
+    public int EventSubConduitReconcileIntervalSeconds { get; set; } = 60;
+
     public int VodDiscoveryInitialDelaySeconds { get; set; } = 30;
 
     public int VodDiscoveryRetryCount { get; set; } = 20;

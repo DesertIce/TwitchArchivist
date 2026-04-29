@@ -175,6 +175,15 @@ public class TwitchEventSubHostedService(
 
     private async Task EnsureSubscriptionsIfConnectedAsync(CancellationToken cancellationToken)
     {
+        if (string.Equals(
+            twitchOptions.Value.EventSubTransportMode,
+            "conduit-websocket",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            _nextSubscriptionSyncUtc = DateTimeOffset.MaxValue;
+            return;
+        }
+
         if (!_isConnected || string.IsNullOrWhiteSpace(eventSubWebsocketClient.SessionId))
         {
             return;

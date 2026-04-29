@@ -239,6 +239,332 @@ public class TwitchApiClientTests
         Assert.True(channel.IsLive);
     }
 
+    [Fact]
+    public async Task HelixClientCreatesConduitWithAppToken()
+    {
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://api.twitch.tv/helix/eventsub/conduits", request.RequestUri?.ToString());
+            Assert.Equal("Bearer test-token", request.Headers.Authorization?.ToString());
+
+            var payload = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("\"shard_count\":4", payload);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "conduit-123",
+                          "shard_count": 4
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var helixClient = CreateHelixClient(handler);
+
+        var conduit = await helixClient.CreateEventSubConduitAsync(4, CancellationToken.None);
+
+        Assert.Equal("conduit-123", conduit.Id);
+        Assert.Equal(4, conduit.ShardCount);
+        Assert.Empty(conduit.Shards);
+    }
+
+    [Fact]
+    public async Task HelixClientGetsExistingConduitsWithShards()
+    {
+        var requests = new Queue<Func<HttpRequestMessage, HttpResponseMessage>>([
+            request =>
+            {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal("https://api.twitch.tv/helix/eventsub/conduits", request.RequestUri?.ToString());
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "data": [
+                            {
+                              "id": "conduit-123",
+                              "shard_count": 2
+                            }
+                          ]
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            },
+            request =>
+            {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal("https://api.twitch.tv/helix/eventsub/conduits/shards?conduit_id=conduit-123", request.RequestUri?.ToString());
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "data": [
+                            {
+                              "id": "0",
+                              "status": "enabled",
+                              "transport": {
+                                "session_id": "session-a"
+                              }
+                            },
+                            {
+                              "id": "1",
+                              "status": "websocket_disconnected",
+                              "transport": {
+                                "session_id": "session-b"
+                              }
+                            }
+                          ]
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+        ]);
+        var handler = new StubHttpMessageHandler(request => requests.Dequeue().Invoke(request));
+        var helixClient = CreateHelixClient(handler);
+
+        var conduits = await helixClient.GetEventSubConduitsAsync(CancellationToken.None);
+
+        var conduit = Assert.Single(conduits);
+        Assert.Equal("conduit-123", conduit.Id);
+        Assert.Equal(2, conduit.ShardCount);
+        Assert.Collection(
+            conduit.Shards.OrderBy(x => x.ShardId),
+            shard =>
+            {
+                Assert.Equal("0", shard.ShardId);
+                Assert.Equal("enabled", shard.Status);
+                Assert.Equal("session-a", shard.TransportSessionId);
+            },
+            shard =>
+            {
+                Assert.Equal("1", shard.ShardId);
+                Assert.Equal("websocket_disconnected", shard.Status);
+                Assert.Equal("session-b", shard.TransportSessionId);
+            });
+    }
+
+    [Fact]
+    public async Task HelixClientUpdatesConduitShardAssignments()
+    {
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            Assert.Equal(HttpMethod.Patch, request.Method);
+            Assert.Equal("https://api.twitch.tv/helix/eventsub/conduits/shards", request.RequestUri?.ToString());
+
+            var payload = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("\"conduit_id\":\"conduit-123\"", payload);
+            Assert.Contains("\"id\":\"0\"", payload);
+            Assert.Contains("\"session_id\":\"session-a\"", payload);
+            Assert.Contains("\"id\":\"1\"", payload);
+            Assert.Contains("\"session_id\":\"session-b\"", payload);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "0",
+                          "status": "enabled",
+                          "transport": {
+                            "session_id": "session-a"
+                          }
+                        },
+                        {
+                          "id": "1",
+                          "status": "enabled",
+                          "transport": {
+                            "session_id": "session-b"
+                          }
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var helixClient = CreateHelixClient(handler);
+
+        var shards = await helixClient.UpdateEventSubConduitShardsAsync(
+            "conduit-123",
+            [
+                new EventSubConduitShardRecord("0", "enabled", "session-a"),
+                new EventSubConduitShardRecord("1", "enabled", "session-b")
+            ],
+            CancellationToken.None);
+
+        Assert.Collection(
+            shards.OrderBy(x => x.ShardId),
+            shard => Assert.Equal("session-a", shard.TransportSessionId),
+            shard => Assert.Equal("session-b", shard.TransportSessionId));
+    }
+
+    [Fact]
+    public async Task HelixClientCreatesConduitBackedSubscription()
+    {
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://api.twitch.tv/helix/eventsub/subscriptions", request.RequestUri?.ToString());
+
+            var payload = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("\"type\":\"stream.offline\"", payload);
+            Assert.Contains("\"broadcaster_user_id\":\"12345\"", payload);
+            Assert.Contains("\"method\":\"conduit\"", payload);
+            Assert.Contains("\"conduit_id\":\"conduit-123\"", payload);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "sub-1",
+                          "type": "stream.offline",
+                          "status": "enabled",
+                          "condition": {
+                            "broadcaster_user_id": "12345"
+                          },
+                          "transport": {
+                            "conduit_id": "conduit-123"
+                          }
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var helixClient = CreateHelixClient(handler);
+
+        var subscription = await helixClient.CreateConduitSubscriptionAsync(
+            "stream.offline",
+            "12345",
+            "conduit-123",
+            CancellationToken.None);
+
+        Assert.Equal("sub-1", subscription.Id);
+        Assert.Equal("stream.offline", subscription.Type);
+        Assert.Equal("12345", subscription.BroadcasterUserId);
+        Assert.Null(subscription.TransportSessionId);
+    }
+
+    [Fact]
+    public async Task HelixClientIncludesConduitContextWhenShardAssignmentFails()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+        {
+            ReasonPhrase = "Too Many Requests",
+            Content = new StringContent("{}", Encoding.UTF8, "application/json")
+        });
+        var helixClient = CreateHelixClient(handler);
+
+        var exception = await Assert.ThrowsAsync<TwitchHelixRateLimitException>(() => helixClient.UpdateEventSubConduitShardsAsync(
+            "conduit-123",
+            [new EventSubConduitShardRecord("7", "enabled", "session-z")],
+            CancellationToken.None));
+
+        Assert.Contains("conduit-123", exception.Message);
+        Assert.Contains("7", exception.Message);
+    }
+
+    [Fact]
+    public async Task HelixClientParsesRetryAfterOnRateLimit()
+    {
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                ReasonPhrase = "Too Many Requests",
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(12));
+            return response;
+        });
+        var helixClient = CreateHelixClient(handler);
+
+        var exception = await Assert.ThrowsAsync<TwitchHelixRateLimitException>(() => helixClient.UpdateEventSubConduitShardsAsync(
+            "conduit-123",
+            [new EventSubConduitShardRecord("7", "enabled", "session-z")],
+            CancellationToken.None));
+
+        Assert.Equal(TimeSpan.FromSeconds(12), exception.RetryAfter);
+    }
+
+    [Fact]
+    public async Task HelixClientUpdatesConduitShardCount()
+    {
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            Assert.Equal(HttpMethod.Patch, request.Method);
+            Assert.Equal("https://api.twitch.tv/helix/eventsub/conduits", request.RequestUri?.ToString());
+
+            var payload = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("\"id\":\"conduit-123\"", payload);
+            Assert.Contains("\"shard_count\":6", payload);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "conduit-123",
+                          "shard_count": 6
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var helixClient = CreateHelixClient(handler);
+
+        var conduit = await helixClient.UpdateEventSubConduitAsync("conduit-123", 6, CancellationToken.None);
+
+        Assert.Equal("conduit-123", conduit.Id);
+        Assert.Equal(6, conduit.ShardCount);
+    }
+
+    private static TwitchHelixClient CreateHelixClient(HttpMessageHandler handler)
+    {
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.twitch.tv/helix/")
+        };
+        var factory = new StubHttpClientFactory(client);
+        var authProvider = new StubAccessTokenProvider();
+        var options = Options.Create(new TwitchOptions
+        {
+            ClientId = "client-id"
+        });
+
+        return new TwitchHelixClient(factory, authProvider, options);
+    }
+
     private sealed class StubAccessTokenProvider : ITwitchAccessTokenProvider
     {
         public string? BuildUserAuthorizationUrl(string state, string redirectUri) => null;
@@ -264,9 +590,21 @@ public class TwitchApiClientTests
         public HttpClient CreateClient(string name) => client;
     }
 
-    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
+        private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler;
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler)
+        {
+            _handler = request => Task.FromResult(handler(request));
+        }
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler)
+        {
+            _handler = handler;
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            => Task.FromResult(handler(request));
+            => _handler(request);
     }
 }

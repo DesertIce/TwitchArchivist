@@ -148,6 +148,41 @@ Important detail:
 3. Run the web host with `dotnet run --project src/TwitchArchivist`
 4. Open `http://localhost:5000/diagnostics` and use `Authorize Twitch user token` to complete the EventSub WebSocket OAuth flow.
 
+## EventSub conduit rollout
+
+Conduit-backed EventSub is now available behind `Twitch:EventSubTransportMode`.
+
+Relevant settings:
+
+```json
+"Twitch": {
+  "EventSubTransportMode": "conduit-websocket",
+  "EventSubConduitShardCount": 2,
+  "EventSubConduitId": "",
+  "EventSubConduitAssignmentTimeoutSeconds": 10,
+  "EventSubConduitReconcileIntervalSeconds": 30
+}
+```
+
+Rollout procedure:
+
+1. Enable `EventSubTransportMode = conduit-websocket` in a non-production environment first.
+2. Start with a small shard count such as `1` or `2`.
+3. Start the app and confirm `/healthz` or `/api/runtime-status` shows:
+   `eventSubTransportMode = conduit-websocket`
+   `eventSubConduitId` populated
+   `eventSubActiveShardCount` matching the configured shard count
+4. Verify live `stream.online` and `stream.offline` handling still works for a tracked channel.
+5. Restart the app and confirm the conduit id stays stable and the subscription count does not grow.
+6. Watch the diagnostics page for `Last shard assignment error`, `Last subscription reconcile error`, and `Last rate limit`.
+7. After the conduit path is stable, allow the built-in cleanup loop to remove obsolete session-bound subscriptions from the old direct-websocket flow.
+
+Operational notes:
+
+- Direct WebSocket mode remains the default until `EventSubTransportMode` is changed.
+- Conduit mode repairs shard transport assignments on reconnect; it should not recreate the full subscription set on every session change.
+- If Twitch rate-limits conduit assignment or cleanup, the service honors `Retry-After` and records the last rate-limit time in runtime diagnostics.
+
 ## Twitch OAuth callback
 
 EventSub WebSocket subscriptions in this app use a Twitch user access token. The OAuth callback is served by the same ASP.NET host as the admin UI.

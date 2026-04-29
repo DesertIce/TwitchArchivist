@@ -47,6 +47,7 @@ builder.Services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
 builder.Services.AddSingleton<ITwitchLiveStateSynchronizer, TwitchLiveStateSynchronizer>();
 builder.Services.AddSingleton<ITwitchDownloaderRunner, TwitchDownloaderRunner>();
 builder.Services.AddSingleton<IEventSubSubscriptionSynchronizer, EventSubSubscriptionSynchronizer>();
+builder.Services.AddSingleton<EventSubConduitCleanupService>();
 builder.Services.AddTwitchLibEventSubWebsockets();
 builder.Services.AddSingleton<IEventSubWebsocketClient>(serviceProvider =>
 {
@@ -58,7 +59,18 @@ builder.Services.AddTwitchArchivistPersistence(builder.Configuration, builder.En
 builder.Services.AddHostedService<TwitchAccessTokenRefreshService>();
 builder.Services.AddHostedService<DatabaseInitializationHostedService>();
 builder.Services.AddHostedService<ConfigurationDiagnosticsHostedService>();
-builder.Services.AddHostedService<TwitchEventSubHostedService>();
+builder.Services.AddSingleton<IEventSubConduitCoordinator, EventSubConduitCoordinator>();
+if (string.Equals(
+    builder.Configuration.GetSection(TwitchOptions.SectionName)["EventSubTransportMode"],
+    "conduit-websocket",
+    StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHostedService<TwitchEventSubConduitHostedService>();
+}
+else
+{
+    builder.Services.AddHostedService<TwitchEventSubHostedService>();
+}
 builder.Services.AddHostedService<ArchiveJobWorker>();
 
 var app = builder.Build();
@@ -78,6 +90,14 @@ app.MapGet("/healthz", (RuntimeStatusStore runtimeStatusStore) => Results.Ok(new
     databaseReady = runtimeStatusStore.DatabaseReady,
     downloaderExecutableValid = runtimeStatusStore.DownloaderExecutableValid,
     eventSubConnectionState = runtimeStatusStore.EventSubConnectionState,
+    eventSubTransportMode = runtimeStatusStore.EventSubTransportMode,
+    eventSubConduitId = runtimeStatusStore.EventSubConduitId,
+    eventSubConfiguredShardCount = runtimeStatusStore.EventSubConfiguredShardCount,
+    eventSubActiveShardCount = runtimeStatusStore.EventSubActiveShardCount,
+    eventSubDisabledShardCount = runtimeStatusStore.EventSubDisabledShardCount,
+    eventSubLastShardAssignmentError = runtimeStatusStore.EventSubLastShardAssignmentError,
+    eventSubLastSubscriptionReconcileError = runtimeStatusStore.EventSubLastSubscriptionReconcileError,
+    eventSubLastRateLimitUtc = runtimeStatusStore.EventSubLastRateLimitUtc,
     twitchUserAuthorizationConfigured = runtimeStatusStore.TwitchUserAuthorizationConfigured,
     twitchUserAuthorizationLogin = runtimeStatusStore.TwitchUserAuthorizationLogin,
     twitchUserAuthorizationExpiresUtc = runtimeStatusStore.TwitchUserAuthorizationExpiresUtc
@@ -102,6 +122,14 @@ app.MapGet("/api/runtime-status", async (ITwitchAccessTokenProvider accessTokenP
         downloaderExecutablePath = runtimeStatusStore.DownloaderExecutablePath,
         diagnosticsMessage = runtimeStatusStore.DiagnosticsMessage,
         eventSubConnectionState = runtimeStatusStore.EventSubConnectionState,
+        eventSubTransportMode = runtimeStatusStore.EventSubTransportMode,
+        eventSubConduitId = runtimeStatusStore.EventSubConduitId,
+        eventSubConfiguredShardCount = runtimeStatusStore.EventSubConfiguredShardCount,
+        eventSubActiveShardCount = runtimeStatusStore.EventSubActiveShardCount,
+        eventSubDisabledShardCount = runtimeStatusStore.EventSubDisabledShardCount,
+        eventSubLastShardAssignmentError = runtimeStatusStore.EventSubLastShardAssignmentError,
+        eventSubLastSubscriptionReconcileError = runtimeStatusStore.EventSubLastSubscriptionReconcileError,
+        eventSubLastRateLimitUtc = runtimeStatusStore.EventSubLastRateLimitUtc,
         twitchUserAuthorizationConfigured = runtimeStatusStore.TwitchUserAuthorizationConfigured,
         twitchUserAuthorizationIsValid = runtimeStatusStore.TwitchUserAuthorizationIsValid,
         twitchUserAuthorizationValidity = runtimeStatusStore.TwitchUserAuthorizationValidity,

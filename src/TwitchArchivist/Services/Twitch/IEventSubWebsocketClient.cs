@@ -2,6 +2,8 @@ namespace TwitchArchivist.Services.Twitch;
 
 public interface IEventSubWebsocketClient
 {
+    IEventSubShardClient CreateShardClient(string shardKey);
+
     string? SessionId { get; }
 
     event Func<object?, EventSubConnectedEventArgs, Task>? Connected;
@@ -23,11 +25,11 @@ public interface IEventSubWebsocketClient
     Task<bool> DisconnectAsync();
 }
 
-public sealed record EventSubConnectedEventArgs(bool IsRequestedReconnect);
+public sealed record EventSubConnectedEventArgs(bool IsRequestedReconnect, string? SessionId = null);
 
-public sealed record EventSubDisconnectedEventArgs;
+public sealed record EventSubDisconnectedEventArgs(string? SessionId = null);
 
-public sealed record EventSubReconnectedEventArgs;
+public sealed record EventSubReconnectedEventArgs(string? SessionId = null);
 
 public sealed record EventSubErrorEventArgs(Exception Exception);
 

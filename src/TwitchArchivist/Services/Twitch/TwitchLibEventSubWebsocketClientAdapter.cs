@@ -1,72 +1,81 @@
-using TwitchLib.EventSub.Core.EventArgs.Stream;
+using Microsoft.Extensions.Logging.Abstractions;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs;
 
 namespace TwitchArchivist.Services.Twitch;
 
-public sealed class TwitchLibEventSubWebsocketClientAdapter(EventSubWebsocketClient innerClient) : IEventSubWebsocketClient
+public sealed class TwitchLibEventSubWebsocketClientAdapter : IEventSubWebsocketClient
 {
-    public string? SessionId => innerClient.SessionId;
+    private readonly IEventSubShardClient _primaryShardClient;
+    private readonly Func<string, IEventSubShardClient> _shardClientFactory;
 
-    public event Func<object?, EventSubConnectedEventArgs, Task>? Connected;
+    public TwitchLibEventSubWebsocketClientAdapter(EventSubWebsocketClient innerClient)
+        : this(
+            new TwitchLibEventSubShardClient("primary", innerClient),
+            shardKey => new TwitchLibEventSubShardClient(
+                shardKey,
+                new EventSubWebsocketClient(NullLoggerFactory.Instance)))
+    {
+    }
 
-    public event Func<object?, EventSubDisconnectedEventArgs, Task>? Disconnected;
+    public TwitchLibEventSubWebsocketClientAdapter(
+        IEventSubShardClient primaryShardClient,
+        Func<string, IEventSubShardClient> shardClientFactory)
+    {
+        _primaryShardClient = primaryShardClient;
+        _shardClientFactory = shardClientFactory;
+    }
 
-    public event Func<object?, EventSubReconnectedEventArgs, Task>? Reconnected;
+    public string? SessionId => _primaryShardClient.SessionId;
 
-    public event Func<object?, EventSubErrorEventArgs, Task>? ErrorOccurred;
+    public event Func<object?, EventSubConnectedEventArgs, Task>? Connected
+    {
+        add => _primaryShardClient.Connected += value;
+        remove => _primaryShardClient.Connected -= value;
+    }
 
-    public event Func<object?, EventSubStreamOnlineEventArgs, Task>? StreamOnline;
+    public event Func<object?, EventSubDisconnectedEventArgs, Task>? Disconnected
+    {
+        add => _primaryShardClient.Disconnected += value;
+        remove => _primaryShardClient.Disconnected -= value;
+    }
 
-    public event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline;
+    public event Func<object?, EventSubReconnectedEventArgs, Task>? Reconnected
+    {
+        add => _primaryShardClient.Reconnected += value;
+        remove => _primaryShardClient.Reconnected -= value;
+    }
 
-    public Task<bool> ConnectAsync(Uri endpoint) => innerClient.ConnectAsync(endpoint);
+    public event Func<object?, EventSubErrorEventArgs, Task>? ErrorOccurred
+    {
+        add => _primaryShardClient.ErrorOccurred += value;
+        remove => _primaryShardClient.ErrorOccurred -= value;
+    }
 
-    public Task<bool> ReconnectAsync() => innerClient.ReconnectAsync();
+    public event Func<object?, EventSubStreamOnlineEventArgs, Task>? StreamOnline
+    {
+        add => _primaryShardClient.StreamOnline += value;
+        remove => _primaryShardClient.StreamOnline -= value;
+    }
 
-    public Task<bool> DisconnectAsync() => innerClient.DisconnectAsync();
+    public event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline
+    {
+        add => _primaryShardClient.StreamOffline += value;
+        remove => _primaryShardClient.StreamOffline -= value;
+    }
+
+    public IEventSubShardClient CreateShardClient(string shardKey) => _shardClientFactory(shardKey);
+
+    public Task<bool> ConnectAsync(Uri endpoint) => _primaryShardClient.ConnectAsync(endpoint);
+
+    public Task<bool> ReconnectAsync() => _primaryShardClient.ReconnectAsync();
+
+    public Task<bool> DisconnectAsync() => _primaryShardClient.DisconnectAsync();
 
     public void Attach()
     {
-        innerClient.WebsocketConnected += OnWebsocketConnectedAsync;
-        innerClient.WebsocketDisconnected += OnWebsocketDisconnectedAsync;
-        innerClient.WebsocketReconnected += OnWebsocketReconnectedAsync;
-        innerClient.ErrorOccurred += OnErrorOccurredAsync;
-        innerClient.StreamOnline += OnStreamOnlineAsync;
-        innerClient.StreamOffline += OnStreamOfflineAsync;
     }
 
     public void Detach()
     {
-        innerClient.WebsocketConnected -= OnWebsocketConnectedAsync;
-        innerClient.WebsocketDisconnected -= OnWebsocketDisconnectedAsync;
-        innerClient.WebsocketReconnected -= OnWebsocketReconnectedAsync;
-        innerClient.ErrorOccurred -= OnErrorOccurredAsync;
-        innerClient.StreamOnline -= OnStreamOnlineAsync;
-        innerClient.StreamOffline -= OnStreamOfflineAsync;
     }
-
-    private Task OnWebsocketConnectedAsync(object? sender, WebsocketConnectedArgs args)
-        => Connected?.Invoke(sender, new EventSubConnectedEventArgs(args.IsRequestedReconnect)) ?? Task.CompletedTask;
-
-    private Task OnWebsocketDisconnectedAsync(object? sender, WebsocketDisconnectedArgs args)
-        => Disconnected?.Invoke(sender, new EventSubDisconnectedEventArgs()) ?? Task.CompletedTask;
-
-    private Task OnWebsocketReconnectedAsync(object? sender, WebsocketReconnectedArgs args)
-        => Reconnected?.Invoke(sender, new EventSubReconnectedEventArgs()) ?? Task.CompletedTask;
-
-    private Task OnErrorOccurredAsync(object? sender, ErrorOccuredArgs args)
-        => ErrorOccurred?.Invoke(sender, new EventSubErrorEventArgs(args.Exception)) ?? Task.CompletedTask;
-
-    private Task OnStreamOnlineAsync(object? sender, StreamOnlineArgs args)
-        => StreamOnline?.Invoke(sender, new EventSubStreamOnlineEventArgs(
-            args.Payload.Event.BroadcasterUserLogin,
-            args.Payload.Event.BroadcasterUserId,
-            args.Payload.Event.Id,
-            args.Payload.Event.StartedAt)) ?? Task.CompletedTask;
-
-    private Task OnStreamOfflineAsync(object? sender, StreamOfflineArgs args)
-        => StreamOffline?.Invoke(sender, new EventSubStreamOfflineEventArgs(
-            args.Payload.Event.BroadcasterUserLogin,
-            args.Payload.Event.BroadcasterUserId)) ?? Task.CompletedTask;
 }

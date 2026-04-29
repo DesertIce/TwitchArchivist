@@ -85,7 +85,8 @@ public class TwitchEventSubHostedServiceTests
         var websocketClient = new FakeEventSubWebsocketClient();
         var subscriptionSynchronizer = new EventSubSubscriptionSynchronizer(
             new StubTwitchHelixClient(),
-            database.Services.GetRequiredService<IServiceScopeFactory>());
+            database.Services.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new TwitchOptions()));
         var options = Options.Create(new TwitchOptions
         {
             EventSubMonitorIntervalSeconds = 1,
@@ -128,7 +129,8 @@ public class TwitchEventSubHostedServiceTests
         };
         var subscriptionSynchronizer = new EventSubSubscriptionSynchronizer(
             new StubTwitchHelixClient(),
-            database.Services.GetRequiredService<IServiceScopeFactory>());
+            database.Services.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new TwitchOptions()));
         var options = Options.Create(new TwitchOptions
         {
             EventSubMonitorIntervalSeconds = 1,
@@ -180,7 +182,10 @@ public class TwitchEventSubHostedServiceTests
         var service = new TwitchEventSubHostedService(
             websocketClient,
             new StubAccessTokenProvider(),
-            new EventSubSubscriptionSynchronizer(new StubTwitchHelixClient(), database.Services.GetRequiredService<IServiceScopeFactory>()),
+            new EventSubSubscriptionSynchronizer(
+                new StubTwitchHelixClient(),
+                database.Services.GetRequiredService<IServiceScopeFactory>(),
+                Options.Create(new TwitchOptions())),
             database.Services.GetRequiredService<IServiceScopeFactory>(),
             new NoOpArchiveJobQueue(),
             new RuntimeStatusStore(),
@@ -345,7 +350,10 @@ public class TwitchEventSubHostedServiceTests
         return new TwitchEventSubHostedService(
             websocketClient,
             accessTokenProvider ?? new StubAccessTokenProvider(),
-            subscriptionSynchronizer ?? new EventSubSubscriptionSynchronizer(new StubTwitchHelixClient(), services.GetRequiredService<IServiceScopeFactory>()),
+            subscriptionSynchronizer ?? new EventSubSubscriptionSynchronizer(
+                new StubTwitchHelixClient(),
+                services.GetRequiredService<IServiceScopeFactory>(),
+                Options.Create(new TwitchOptions())),
             services.GetRequiredService<IServiceScopeFactory>(),
             archiveJobQueue ?? new NoOpArchiveJobQueue(),
             new RuntimeStatusStore(),
@@ -407,6 +415,8 @@ public class TwitchEventSubHostedServiceTests
         public event Func<object?, EventSubErrorEventArgs, Task>? ErrorOccurred;
         public event Func<object?, EventSubStreamOnlineEventArgs, Task>? StreamOnline;
         public event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline;
+
+        public IEventSubShardClient CreateShardClient(string shardKey) => throw new NotSupportedException();
 
         public async Task<bool> ConnectAsync(Uri endpoint)
         {
@@ -638,6 +648,8 @@ public class TwitchEventSubHostedServiceTests
         public event Func<object?, EventSubErrorEventArgs, Task>? ErrorOccurred;
         public event Func<object?, EventSubStreamOnlineEventArgs, Task>? StreamOnline;
         public event Func<object?, EventSubStreamOfflineEventArgs, Task>? StreamOffline;
+
+        public IEventSubShardClient CreateShardClient(string shardKey) => throw new NotSupportedException();
 
         public Task<bool> ConnectAsync(Uri endpoint)
         {

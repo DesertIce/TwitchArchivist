@@ -20,6 +20,7 @@ public class TwitchHelixClient(
             HttpMethod.Get,
             body: null,
             useUserAccessToken: false,
+            requestContext: $"resolving Twitch user id for login={twitchLogin}",
             cancellationToken);
 
         return response?.Data.FirstOrDefault()?.Id;
@@ -32,6 +33,7 @@ public class TwitchHelixClient(
             HttpMethod.Get,
             body: null,
             useUserAccessToken: false,
+            requestContext: $"searching Twitch channels for query={query}",
             cancellationToken);
 
         return response?.Data
@@ -68,6 +70,7 @@ public class TwitchHelixClient(
                 HttpMethod.Get,
                 body: null,
                 useUserAccessToken: false,
+                requestContext: $"listing Twitch live streams for logins=[{string.Join(", ", batch)}]",
                 cancellationToken);
 
             if (response?.Data is null)
@@ -95,6 +98,7 @@ public class TwitchHelixClient(
             HttpMethod.Get,
             body: null,
             useUserAccessToken: false,
+            requestContext: $"listing archive videos for broadcaster_user_id={broadcasterUserId}",
             cancellationToken);
 
         var videos = response?.Data
@@ -111,11 +115,113 @@ public class TwitchHelixClient(
             HttpMethod.Get,
             body: null,
             useUserAccessToken: true,
+            requestContext: "listing EventSub subscriptions",
             cancellationToken);
 
         return response?.Data
             .Select(x => new EventSubSubscriptionRecord(x.Id, x.Type, x.Status, x.Condition.BroadcasterUserId, x.Transport.SessionId))
             .ToList() ?? [];
+    }
+
+    public Task DeleteEventSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken)
+        => SendHelixAsync<object?>(
+            $"/eventsub/subscriptions?id={Uri.EscapeDataString(subscriptionId)}",
+            HttpMethod.Delete,
+            body: null,
+            useUserAccessToken: false,
+            requestContext: $"deleting EventSub subscription id={subscriptionId}",
+            cancellationToken);
+
+    public async Task<IReadOnlyList<EventSubConduitRecord>> GetEventSubConduitsAsync(CancellationToken cancellationToken)
+    {
+        var response = await SendHelixAsync<HelixEnvelope<ConduitRecord>>(
+            "/eventsub/conduits",
+            HttpMethod.Get,
+            body: null,
+            useUserAccessToken: false,
+            requestContext: "listing EventSub conduits",
+            cancellationToken);
+
+        if (response?.Data is null || response.Data.Count == 0)
+        {
+            return [];
+        }
+
+        var conduits = new List<EventSubConduitRecord>(response.Data.Count);
+        foreach (var conduit in response.Data)
+        {
+            var shards = await GetEventSubConduitShardsAsync(conduit.Id, cancellationToken);
+            conduits.Add(new EventSubConduitRecord(conduit.Id, conduit.ShardCount, shards));
+        }
+
+        return conduits;
+    }
+
+    public async Task<EventSubConduitRecord> CreateEventSubConduitAsync(int shardCount, CancellationToken cancellationToken)
+    {
+        var response = await SendHelixAsync<HelixEnvelope<ConduitRecord>>(
+            "/eventsub/conduits",
+            HttpMethod.Post,
+            new
+            {
+                shard_count = shardCount
+            },
+            useUserAccessToken: false,
+            requestContext: $"creating EventSub conduit with shard_count={shardCount}",
+            cancellationToken);
+
+        var record = response?.Data.FirstOrDefault()
+            ?? throw new InvalidOperationException("Twitch did not return the created EventSub conduit.");
+
+        return MapConduitRecord(record);
+    }
+
+    public async Task<EventSubConduitRecord> UpdateEventSubConduitAsync(string conduitId, int shardCount, CancellationToken cancellationToken)
+    {
+        var response = await SendHelixAsync<HelixEnvelope<ConduitRecord>>(
+            "/eventsub/conduits",
+            HttpMethod.Patch,
+            new
+            {
+                id = conduitId,
+                shard_count = shardCount
+            },
+            useUserAccessToken: false,
+            requestContext: $"updating EventSub conduit {conduitId} shard_count={shardCount}",
+            cancellationToken);
+
+        var record = response?.Data.FirstOrDefault()
+            ?? throw new InvalidOperationException($"Twitch did not return the updated EventSub conduit for conduit_id={conduitId}.");
+
+        return MapConduitRecord(record);
+    }
+
+    public async Task<IReadOnlyList<EventSubConduitShardRecord>> UpdateEventSubConduitShardsAsync(
+        string conduitId,
+        IReadOnlyList<EventSubConduitShardRecord> shards,
+        CancellationToken cancellationToken)
+    {
+        var response = await SendHelixAsync<HelixEnvelope<ConduitShardRecord>>(
+            "/eventsub/conduits/shards",
+            HttpMethod.Patch,
+            new
+            {
+                conduit_id = conduitId,
+                shards = shards.Select(x => new
+                {
+                    id = x.ShardId,
+                    transport = new
+                    {
+                        method = "websocket",
+                        session_id = x.TransportSessionId
+                    }
+                }).ToArray()
+            },
+            useUserAccessToken: false,
+            requestContext: $"updating EventSub conduit shard assignments for conduit_id={conduitId} shard_ids=[{string.Join(", ", shards.Select(x => x.ShardId))}]",
+            cancellationToken);
+
+        return response?.Data.Select(MapConduitShardRecord).ToList() ?? [];
     }
 
     public async Task<EventSubSubscriptionRecord> CreateStreamSubscriptionAsync(
@@ -144,6 +250,7 @@ public class TwitchHelixClient(
             HttpMethod.Post,
             payload,
             useUserAccessToken: true,
+            requestContext: $"creating EventSub websocket subscription type={subscriptionType} broadcaster_user_id={broadcasterUserId} session_id={sessionId}",
             cancellationToken);
 
         var record = response?.Data.FirstOrDefault()
@@ -152,7 +259,72 @@ public class TwitchHelixClient(
         return new EventSubSubscriptionRecord(record.Id, record.Type, record.Status, record.Condition.BroadcasterUserId, record.Transport.SessionId);
     }
 
-    private async Task<T?> SendHelixAsync<T>(string relativePath, HttpMethod method, object? body, bool useUserAccessToken, CancellationToken cancellationToken)
+    public async Task<EventSubSubscriptionRecord> CreateConduitSubscriptionAsync(
+        string subscriptionType,
+        string broadcasterUserId,
+        string conduitId,
+        CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            type = subscriptionType,
+            version = "1",
+            condition = new Dictionary<string, string>
+            {
+                ["broadcaster_user_id"] = broadcasterUserId
+            },
+            transport = new
+            {
+                method = "conduit",
+                conduit_id = conduitId
+            }
+        };
+
+        var response = await SendHelixAsync<HelixEnvelope<SubscriptionRecord>>(
+            "/eventsub/subscriptions",
+            HttpMethod.Post,
+            payload,
+            useUserAccessToken: false,
+            requestContext: $"creating EventSub conduit subscription type={subscriptionType} broadcaster_user_id={broadcasterUserId} conduit_id={conduitId}",
+            cancellationToken);
+
+        var record = response?.Data.FirstOrDefault()
+            ?? throw new InvalidOperationException($"Twitch did not return the created EventSub conduit subscription for conduit_id={conduitId}.");
+
+        return new EventSubSubscriptionRecord(record.Id, record.Type, record.Status, record.Condition.BroadcasterUserId, record.Transport.SessionId);
+    }
+
+    private static EventSubConduitRecord MapConduitRecord(ConduitRecord record)
+        => new(
+            record.Id,
+            record.ShardCount,
+            []);
+
+    private static EventSubConduitShardRecord MapConduitShardRecord(ConduitShardRecord record)
+        => new(record.Id, record.Status, record.Transport.SessionId);
+
+    private async Task<IReadOnlyList<EventSubConduitShardRecord>> GetEventSubConduitShardsAsync(
+        string conduitId,
+        CancellationToken cancellationToken)
+    {
+        var response = await SendHelixAsync<HelixEnvelope<ConduitShardRecord>>(
+            $"/eventsub/conduits/shards?conduit_id={Uri.EscapeDataString(conduitId)}",
+            HttpMethod.Get,
+            body: null,
+            useUserAccessToken: false,
+            requestContext: $"listing EventSub conduit shards for conduit_id={conduitId}",
+            cancellationToken);
+
+        return response?.Data.Select(MapConduitShardRecord).ToList() ?? [];
+    }
+
+    private async Task<T?> SendHelixAsync<T>(
+        string relativePath,
+        HttpMethod method,
+        object? body,
+        bool useUserAccessToken,
+        string requestContext,
+        CancellationToken cancellationToken)
     {
         var token = useUserAccessToken
             ? await accessTokenProvider.GetUserAccessTokenAsync(cancellationToken)
@@ -174,7 +346,22 @@ public class TwitchHelixClient(
         }
 
         using var response = await client.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var responseBody = response.Content is null ? string.Empty : await response.Content.ReadAsStringAsync(cancellationToken);
+            if ((int)response.StatusCode == 429)
+            {
+                throw new TwitchHelixRateLimitException(
+                    $"Twitch Helix request failed while {requestContext}. Status=429 ({response.ReasonPhrase}). Response={responseBody}",
+                    ParseRetryAfter(response));
+            }
+
+            throw new HttpRequestException(
+                $"Twitch Helix request failed while {requestContext}. Status={(int)response.StatusCode} ({response.ReasonPhrase}). Response={responseBody}",
+                null,
+                response.StatusCode);
+        }
+
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
     }
 
@@ -214,6 +401,27 @@ public class TwitchHelixClient(
 
         [JsonPropertyName("condition")]
         public SubscriptionCondition Condition { get; set; } = new();
+
+        [JsonPropertyName("transport")]
+        public SubscriptionTransport Transport { get; set; } = new();
+    }
+
+    private sealed class ConduitRecord
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("shard_count")]
+        public int ShardCount { get; set; }
+    }
+
+    private sealed class ConduitShardRecord
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = string.Empty;
 
         [JsonPropertyName("transport")]
         public SubscriptionTransport Transport { get; set; } = new();
@@ -262,5 +470,31 @@ public class TwitchHelixClient(
     {
         [JsonPropertyName("session_id")]
         public string? SessionId { get; set; }
+
+        [JsonPropertyName("conduit_id")]
+        public string? ConduitId { get; set; }
+    }
+
+    private static TimeSpan? ParseRetryAfter(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is not null)
+        {
+            return retryAfter.Delta.Value;
+        }
+
+        if (retryAfter?.Date is not null)
+        {
+            var delay = retryAfter.Date.Value - DateTimeOffset.UtcNow;
+            return delay > TimeSpan.Zero ? delay : TimeSpan.Zero;
+        }
+
+        if (response.Headers.TryGetValues("Retry-After", out var values) &&
+            int.TryParse(values.FirstOrDefault(), out var seconds))
+        {
+            return TimeSpan.FromSeconds(seconds);
+        }
+
+        return null;
     }
 }

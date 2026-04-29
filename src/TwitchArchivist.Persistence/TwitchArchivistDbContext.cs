@@ -15,6 +15,12 @@ public class TwitchArchivistDbContext(DbContextOptions<TwitchArchivistDbContext>
 
     public DbSet<TwitchOAuthToken> TwitchOAuthTokens => Set<TwitchOAuthToken>();
 
+    public DbSet<EventSubConduit> EventSubConduits => Set<EventSubConduit>();
+
+    public DbSet<EventSubConduitShard> EventSubConduitShards => Set<EventSubConduitShard>();
+
+    public DbSet<EventSubSubscriptionBinding> EventSubSubscriptionBindings => Set<EventSubSubscriptionBinding>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ChannelConfiguration>(entity =>
@@ -68,6 +74,39 @@ public class TwitchArchivistDbContext(DbContextOptions<TwitchArchivistDbContext>
             entity.Property(x => x.Scope).HasMaxLength(2048);
             entity.Property(x => x.TwitchUserId).HasMaxLength(64);
             entity.Property(x => x.TwitchUserLogin).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<EventSubConduit>(entity =>
+        {
+            entity.Property(x => x.TwitchConduitId).HasMaxLength(128);
+            entity.HasIndex(x => x.TwitchConduitId).IsUnique();
+        });
+
+        modelBuilder.Entity<EventSubConduitShard>(entity =>
+        {
+            entity.Property(x => x.TransportSessionId).HasMaxLength(128);
+            entity.Property(x => x.Status).HasMaxLength(64);
+            entity.HasIndex(x => new { x.EventSubConduitId, x.ShardId }).IsUnique();
+            entity.HasOne(x => x.EventSubConduit)
+                .WithMany(x => x.Shards)
+                .HasForeignKey(x => x.EventSubConduitId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventSubSubscriptionBinding>(entity =>
+        {
+            entity.Property(x => x.SubscriptionType).HasMaxLength(128);
+            entity.Property(x => x.TwitchSubscriptionId).HasMaxLength(128);
+            entity.Property(x => x.Status).HasMaxLength(64);
+            entity.HasIndex(x => new { x.ChannelConfigurationId, x.SubscriptionType }).IsUnique();
+            entity.HasOne(x => x.EventSubConduit)
+                .WithMany(x => x.SubscriptionBindings)
+                .HasForeignKey(x => x.EventSubConduitId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ChannelConfiguration)
+                .WithMany()
+                .HasForeignKey(x => x.ChannelConfigurationId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
