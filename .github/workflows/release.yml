@@ -83,6 +83,102 @@ jobs:
             -p:FileVersion=${{ steps.version.outputs.assembly_version }} `
             -p:InformationalVersion=${{ steps.version.outputs.release_tag }}+${{ github.sha }}
 
+      - name: Render README as standalone HTML
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          PUBLISH_DIRECTORY: ${{ env.PUBLISH_DIRECTORY }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+
+            const markdown = fs.readFileSync("README.md", "utf8");
+            const response = await github.request("POST /markdown", {
+              text: markdown,
+              mode: "gfm",
+              context: process.env.GITHUB_REPOSITORY
+            });
+
+            const releaseTag = process.env.RELEASE_TAG;
+            const outputDirectory = process.env.PUBLISH_DIRECTORY;
+            fs.mkdirSync(outputDirectory, { recursive: true });
+
+            const html = `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>TwitchArchivist README ${releaseTag}</title>
+              <style>
+                :root {
+                  color-scheme: light dark;
+                  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                  line-height: 1.55;
+                }
+                body {
+                  margin: 0;
+                  padding: 2rem;
+                  background: #0d1117;
+                  color: #e6edf3;
+                }
+                main {
+                  max-width: 960px;
+                  margin: 0 auto;
+                }
+                article {
+                  background: #161b22;
+                  border: 1px solid #30363d;
+                  border-radius: 12px;
+                  padding: 2rem;
+                  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+                }
+                a { color: #58a6ff; }
+                code, pre { font-family: "Cascadia Code", Consolas, monospace; }
+                pre {
+                  overflow-x: auto;
+                  padding: 1rem;
+                  background: #0d1117;
+                  border-radius: 8px;
+                }
+                table {
+                  border-collapse: collapse;
+                  width: 100%;
+                }
+                th, td {
+                  border: 1px solid #30363d;
+                  padding: 0.5rem 0.75rem;
+                  text-align: left;
+                }
+                blockquote {
+                  margin-left: 0;
+                  padding-left: 1rem;
+                  border-left: 4px solid #30363d;
+                  color: #9da7b3;
+                }
+                img {
+                  max-width: 100%;
+                  height: auto;
+                }
+                .meta {
+                  margin-bottom: 1.5rem;
+                  color: #9da7b3;
+                  font-size: 0.95rem;
+                }
+              </style>
+            </head>
+            <body>
+              <main>
+                <article>
+                  <div class="meta">Embedded release documentation for ${releaseTag}</div>
+                  ${response.data}
+                </article>
+              </main>
+            </body>
+            </html>`;
+
+            fs.writeFileSync(path.join(outputDirectory, "README.html"), html, "utf8");
+
       - name: Archive published files
         id: archive
         shell: pwsh

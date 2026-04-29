@@ -1,260 +1,307 @@
 # TwitchArchivist
 
-TwitchArchivist is a Windows-service-oriented ASP.NET Core application that will listen for Twitch EventSub messages, map channels to local archive directories, and invoke `TwitchDownloaderCLI` when a stream ends.
+TwitchArchivist is an ASP.NET Core 8 application for Windows that watches Twitch channels through EventSub, tracks archive jobs in SQLite, and downloads completed VODs with `TwitchDownloaderCLI`.
 
-## Planned scope
+It is designed to run as a Windows Service in production and as a normal ASP.NET Core app during development. The built-in web UI is the local operator surface for channel mappings, diagnostics, logs, and recent archive jobs.
 
-- Run as a Windows Service in production and as a console app in development.
-- Host a lightweight localhost-only web UI for configuration and diagnostics.
-- Store operational configuration in SQLite.
-- Use Twitch EventSub WebSockets plus Helix lookups to discover completed VODs.
-- Invoke an existing `TwitchDownloaderCLI` installation to download video output.
+## Current capabilities
 
-## Prerequisites
+- Listen for Twitch `stream.online` and `stream.offline` events.
+- Track channel-to-directory mappings in SQLite.
+- Queue archive jobs when a stream ends, then wait for the corresponding VOD to become discoverable.
+- Download VODs by invoking an existing `TwitchDownloaderCLI.exe` installation.
+- Optionally auto-prune older successful VOD files per channel after a new archive completes.
+- Expose a localhost web UI plus JSON runtime endpoints for diagnostics and health checks.
+- Run with direct EventSub WebSocket transport or conduit-backed WebSocket transport.
 
+## Requirements
+
+- Windows
 - .NET 8 SDK
-- Git
-- A local `TwitchDownloaderCLI` installation for later implementation stages
+- A Twitch developer application with a client ID and client secret
+- A local `TwitchDownloaderCLI` installation
+
+## Repository layout
+
+- `src/TwitchArchivist`: ASP.NET Core host, Razor Pages UI, runtime services
+- `src/TwitchArchivist.Persistence`: EF Core persistence layer and migrations
+- `tests`: unit and integration tests
+- `scripts`: Windows service install, update, and uninstall scripts
+
+## Configuration
+
+Start from one of the example files:
+
+- `src/TwitchArchivist/appsettings.example.json`
+- `src/TwitchArchivist/appsettings.Development.example.json`
+
+Key sections:
+
+```json
+{
+  "Storage": {
+    "DatabasePath": "data/twitcharchivist.db"
+  },
+  "Downloader": {
+    "ExecutablePath": ""
+  },
+  "Twitch": {
+    "ClientId": "your-client-id",
+    "ClientSecret": "your-client-secret",
+    "EventSubTransportMode": "conduit-websocket"
+  },
+  "FileLogging": {
+    "DirectoryPath": "logs",
+    "FilePrefix": "twitcharchivist",
+    "RetainedDayCount": 3
+  }
+}
+```
+
+Notes:
+
+- `Storage:DatabasePath` is relative to the app content root unless you provide an absolute path.
+- `Downloader:ExecutablePath` can be left blank to use the fallback path `%APPDATA%\TwitchDownloaderCLI\TwitchDownloaderCLI.exe`.
+- The checked-in example files currently opt into `conduit-websocket`.
+- The options class default is still `websocket` if `EventSubTransportMode` is omitted entirely.
 
 ## Twitch developer setup
 
-This app needs a Twitch application registration because it uses Twitch OAuth plus Helix/EventSub APIs. The values you need map directly to the `Twitch` section in `appsettings.json`:
+This app uses both Twitch OAuth and Helix/EventSub APIs. You need a Twitch application registration and must populate:
 
 - `Twitch:ClientId`
 - `Twitch:ClientSecret`
 
-Use `src/TwitchArchivist/appsettings.example.json` as the template for your local `appsettings.json` or `appsettings.Development.json`.
+Create the Twitch app in the developer console at `https://dev.twitch.tv/console`, then register an OAuth redirect URI that matches the host and port where TwitchArchivist is actually running.
 
-### Create a Twitch application
+Examples:
 
-1. Sign in to the Twitch developer console at `https://dev.twitch.tv/console`.
-2. Make sure the Twitch account you are using has email verification completed and two-factor authentication enabled. Twitch requires both before application registration is available.
-3. Open `Applications`, then choose `Register Your Application`.
-4. Enter an application name. Twitch requires the name to be unique across developer applications.
-5. Add this OAuth redirect URL for local development:
-   `http://localhost:5000/auth/twitch/callback`
-6. Choose a category that best fits the app. For this project, a website or application-oriented category is the sensible choice.
-7. Create the application, then open its `Manage` page.
-8. Copy the `Client ID` into `Twitch:ClientId`.
-9. Generate a `Client Secret` and copy it immediately into `Twitch:ClientSecret`.
+- Development HTTP profile from `launchSettings.json`: `http://localhost:5222/auth/twitch/callback`
+- Development HTTPS profile from `launchSettings.json`: `https://localhost:7153/auth/twitch/callback`
+- If you override URLs or run behind a different port, use that exact callback instead
 
-Important operational details:
+Important:
 
-- Treat the client secret like a password. Do not commit it, paste it into issues, or ship it in a release artifact.
-- Generating a new client secret invalidates the old one. If you rotate it in Twitch, update the local service configuration before restarting the app.
-- This repo’s OAuth callback path is hosted by the same ASP.NET Core app as the diagnostics UI, so the redirect URI must match the running host and port exactly.
+- The redirect URI must match the running host, scheme, and port exactly.
+- Generating a new Twitch client secret invalidates the old one.
+- Do not commit secrets to the repo.
 
-### Configure the local appsettings file
+Once the app is running, start user authorization from:
 
-Start from the example file and set at least:
+- `/auth/twitch/start`
 
-```json
-"Twitch": {
-  "ClientId": "your-client-id",
-  "ClientSecret": "your-client-secret"
-}
-```
+The callback is served by the same ASP.NET Core host:
 
-For local development, the callback URL in Twitch should stay aligned with the default app URL used by this repo:
+- `/auth/twitch/callback`
 
-- `http://localhost:5000/auth/twitch/callback`
-
-After the app is running, start the user authorization flow from:
-
-- `http://localhost:5000/auth/twitch/start`
-
-The app will use the configured client ID and client secret to manage app access tokens, and it will store the resulting Twitch user authorization after you complete the browser flow from the diagnostics page.
+The resulting Twitch user token is stored in the SQLite-backed application state.
 
 ## TwitchDownloaderCLI
 
-`TwitchArchivist` shells out to `TwitchDownloaderCLI` after it identifies a completed VOD. This repo does not vendor the downloader binary; you install it separately and point the app at it.
+TwitchArchivist does not vendor the downloader binary. Install it separately from the upstream [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader) releases.
 
-### What it is
-
-`TwitchDownloaderCLI` is the command-line edition of the upstream [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader) project. Upstream documents it as a Twitch VOD, clip, and chat downloader/renderer. For this repo, the relevant part is the CLI executable that can download VOD output on Windows.
-
-### Install on Windows
-
-1. Open the upstream releases page for [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader/releases).
-2. Download the latest Windows release archive.
-3. Extract `TwitchDownloaderCLI.exe` to a stable location.
-4. If you also need FFmpeg, upstream documents a built-in helper:
-   `TwitchDownloaderCLI.exe ffmpeg --download`
-
-The app has one downloader setting:
+Expected setting:
 
 - `Downloader:ExecutablePath`
 
-If that value is blank, the runtime falls back to:
+Fallback when blank:
 
 - `%APPDATA%\TwitchDownloaderCLI\TwitchDownloaderCLI.exe`
 
-If you install the binary somewhere else, set:
+Typical explicit configuration:
 
 ```json
-"Downloader": {
-  "ExecutablePath": "C:\\full\\path\\to\\TwitchDownloaderCLI.exe"
+{
+  "Downloader": {
+    "ExecutablePath": "C:\\Tools\\TwitchDownloaderCLI\\TwitchDownloaderCLI.exe"
+  }
 }
 ```
 
-### How this repo uses the binary
-
-When a completed VOD is ready to archive, the app launches:
+The app launches the downloader like this:
 
 ```text
 TwitchDownloaderCLI.exe videodownload --id <vodId> -o <outputPath>
 ```
 
-The configured path must therefore point to the CLI executable itself, not just the containing folder.
-
-### Verify the downloader installation
-
-Before wiring the service to a real archive path, verify that Windows can launch the executable:
+Manual verification:
 
 ```powershell
-& "C:\full\path\to\TwitchDownloaderCLI.exe" --help
+& "C:\Tools\TwitchDownloaderCLI\TwitchDownloaderCLI.exe" --version
 ```
 
-If you rely on the default path, a reasonable manual layout is:
-
-```text
-%APPDATA%\TwitchDownloaderCLI\TwitchDownloaderCLI.exe
-```
-
-### Diagnostics page behavior
-
-The diagnostics page lets you save the downloader path without manually editing JSON:
-
-- Page: `http://localhost:5000/diagnostics`
-- Saved setting: `Downloader:ExecutablePath` in `appsettings.json`
-- Validation behavior: the app runs `TwitchDownloaderCLI.exe --version` and expects a `TwitchDownloaderCLI ...` banner
-
-Important detail:
-
-- The runtime worker supports the `%APPDATA%` fallback when `Downloader:ExecutablePath` is blank.
-- The diagnostics page save form requires an explicit executable path; it does not currently provide a "clear this value and use fallback" action.
-- For Windows Service installs, the path must be valid from the service account's perspective.
-
-### Notes and constraints
-
-- Keep the downloader executable outside the git repo and outside any path that is routinely cleaned by builds.
-- If you replace the binary with a newer upstream release, no code change is required unless the CLI behavior changes incompatibly.
-- FFmpeg may be needed depending on which TwitchDownloaderCLI operations you use. Upstream documents both standalone FFmpeg installs and the built-in download helper.
+The diagnostics page can also save the executable path and validates it by running `--version` and checking for a `TwitchDownloaderCLI ...` banner.
 
 ## Local development
 
-1. Restore dependencies with `dotnet restore TwitchArchivist.slnx`
-2. Build with `dotnet build TwitchArchivist.slnx`
-3. Run the web host with `dotnet run --project src/TwitchArchivist`
-4. Open `http://localhost:5000/diagnostics` and use `Authorize Twitch user token` to complete the EventSub WebSocket OAuth flow.
+1. Copy `src/TwitchArchivist/appsettings.example.json` or `src/TwitchArchivist/appsettings.Development.example.json` into a local `appsettings.json` or `appsettings.Development.json`.
+2. Populate `Twitch:ClientId` and `Twitch:ClientSecret`.
+3. Restore packages:
 
-## EventSub conduit rollout
+```powershell
+dotnet restore TwitchArchivist.slnx
+```
 
-Conduit-backed EventSub is now available behind `Twitch:EventSubTransportMode`.
+4. Build:
 
-Relevant settings:
+```powershell
+dotnet build TwitchArchivist.slnx
+```
+
+5. Run the web app:
+
+```powershell
+dotnet run --project src/TwitchArchivist
+```
+
+By default, local development uses the `launchSettings.json` profiles:
+
+- HTTP: `http://localhost:5222`
+- HTTPS: `https://localhost:7153`
+
+## Web UI
+
+Primary pages:
+
+- `/`: dashboard with service overview, recent jobs, downloader/EventSub/OAuth summary
+- `/channels`: create, edit, enable, disable, and delete channel mappings
+- `/jobs`: recent archive job history
+- `/diagnostics`: downloader validation, EventSub status, OAuth status, diagnostics message
+- `/logs`: recent in-memory and rolling-file log output
+
+Channel mapping behavior:
+
+- Each channel maps to one output directory.
+- The UI supports Twitch login autocomplete via Helix search.
+- Auto-prune can be enabled per channel.
+- `AutoPruneVodCount` controls how many successful VOD files are retained after a new successful archive.
+
+## Runtime and health endpoints
+
+JSON endpoints:
+
+- `/healthz`
+- `/api/runtime-status`
+- `/api/twitch/channels/search?query=<text>`
+- `/api/filesystem/roots`
+- `/api/filesystem/directories?path=<absolute-path>`
+- `/api/filesystem/entries?path=<absolute-path>&includeFiles=true&searchPattern=*.exe`
+
+`/healthz` reports the high-level service state, including:
+
+- database readiness
+- downloader validation state
+- EventSub transport and connection state
+- conduit id and shard counts
+- Twitch user authorization state
+
+`/api/runtime-status` includes the richer diagnostics payload used by the UI, including the last validation timestamps and recent conduit error fields.
+
+## EventSub transport modes
+
+Configure `Twitch:EventSubTransportMode` as one of:
+
+- `websocket`
+- `conduit-websocket`
+
+Related conduit settings:
 
 ```json
 "Twitch": {
   "EventSubTransportMode": "conduit-websocket",
-  "EventSubConduitShardCount": 2,
-  "EventSubConduitId": "",
+  "EventSubConduitShardCount": 4,
+  "EventSubConduitId": null,
   "EventSubConduitAssignmentTimeoutSeconds": 10,
-  "EventSubConduitReconcileIntervalSeconds": 30
+  "EventSubConduitReconcileIntervalSeconds": 60
 }
 ```
 
-Rollout procedure:
-
-1. Enable `EventSubTransportMode = conduit-websocket` in a non-production environment first.
-2. Start with a small shard count such as `1` or `2`.
-3. Start the app and confirm `/healthz` or `/api/runtime-status` shows:
-   `eventSubTransportMode = conduit-websocket`
-   `eventSubConduitId` populated
-   `eventSubActiveShardCount` matching the configured shard count
-4. Verify live `stream.online` and `stream.offline` handling still works for a tracked channel.
-5. Restart the app and confirm the conduit id stays stable and the subscription count does not grow.
-6. Watch the diagnostics page for `Last shard assignment error`, `Last subscription reconcile error`, and `Last rate limit`.
-7. After the conduit path is stable, allow the built-in cleanup loop to remove obsolete session-bound subscriptions from the old direct-websocket flow.
-
 Operational notes:
 
-- Direct WebSocket mode remains the default until `EventSubTransportMode` is changed.
-- Conduit mode repairs shard transport assignments on reconnect; it should not recreate the full subscription set on every session change.
-- If Twitch rate-limits conduit assignment or cleanup, the service honors `Retry-After` and records the last rate-limit time in runtime diagnostics.
+- The example config files currently use `conduit-websocket`.
+- If the setting is absent, the code falls back to direct `websocket`.
+- Runtime status surfaces the active transport mode, conduit id, configured shards, active shards, disabled shards, last shard assignment error, last reconcile error, and last rate-limit timestamp.
 
-## Twitch OAuth callback
+## Archive job flow
 
-EventSub WebSocket subscriptions in this app use a Twitch user access token. The OAuth callback is served by the same ASP.NET host as the admin UI.
+When a tracked channel goes offline:
 
-Register this redirect URI in the Twitch developer console for local use:
+1. TwitchArchivist queues an archive job.
+2. The worker waits for Twitch to expose the finished archive VOD.
+3. It retries VOD discovery using the configured delay and retry count.
+4. It downloads the matching VOD with `TwitchDownloaderCLI`.
+5. If enabled for that channel, it prunes older successful files after the new archive succeeds.
 
-- `http://localhost:5000/auth/twitch/callback`
+Relevant `Twitch` settings:
 
-After the service is running, start the flow from:
+- `VodDiscoveryInitialDelaySeconds`
+- `VodDiscoveryRetryCount`
+- `VodDiscoveryRetryDelaySeconds`
 
-- `http://localhost:5000/auth/twitch/start`
+## Windows Service scripts
 
-## Windows service scripts
-
-The repo includes publish-first PowerShell scripts under `scripts/`:
+PowerShell helpers live under `scripts/`:
 
 - `scripts/install-service.ps1`
 - `scripts/update-service.ps1`
 - `scripts/uninstall-service.ps1`
 
-Each script supports `-WhatIf` for dry-run verification.
-
-Typical install:
+Examples:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
-```
-
-Typical update:
-
-```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\update-service.ps1
-```
-
-Typical uninstall:
-
-```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1 -RemovePublishDirectory
 ```
 
 Defaults:
 
-- Service name: `TwitchArchivist`
-- Publish directory: `%APPDATA%\TwitchArchivist`
-- Build configuration: `Release`
+- service name: `TwitchArchivist`
+- project path: `src/TwitchArchivist/TwitchArchivist.csproj`
+- publish directory: `%APPDATA%\TwitchArchivist`
+- configuration: `Release`
 
-When run from a git checkout, the install and update scripts publish the app before touching the service and preserve any existing `appsettings*.json` files in the publish directory so local operator config is not overwritten during redeploys.
+Behavior:
 
-When run from an extracted release bundle that does not include a `.git` directory, the install, update, and uninstall scripts skip build/publish steps and use the extracted bundle root as the default publish directory. Extract the release zip to its long-lived install location before running the scripts in that mode.
+- `install-service.ps1` publishes the app, creates the Windows service, and starts it unless `-NoStart` is used.
+- `update-service.ps1` stops the service, republishes, and starts it again unless `-NoStart` is used.
+- `uninstall-service.ps1` stops and deletes the service, and optionally removes the publish directory.
+- All three scripts support `-WhatIf`.
+- The install and update scripts preserve existing `appsettings*.json` files in the publish directory during republish.
+- When run from an extracted bundle without a `.git` directory, the scripts skip `dotnet publish` and use the extracted directory as the publish root.
 
-## GitHub releases
+These scripts require an elevated PowerShell session when they create, start, stop, or delete the Windows service.
 
-GitHub Actions now creates a release on every push to `main`.
+## Logging
+
+The app writes:
+
+- recent in-memory log entries for the `/logs` page
+- rolling file logs under `FileLogging:DirectoryPath`
+
+Default file logging settings:
+
+```json
+"FileLogging": {
+  "DirectoryPath": "logs",
+  "FilePrefix": "twitcharchivist",
+  "RetainedDayCount": 3
+}
+```
+
+## Releases
+
+GitHub Actions creates a release on each push to `main`.
 
 - Workflow: `.github/workflows/release.yml`
-- Tag format: `v<major>.<minor>.<patch>`
-- Current bootstrap behavior: if no prior `v*` tag exists, the first release is `v0.1.0`
+- Tests run before publish
+- Release artifact: zipped `win-x64` publish output
+- First bootstrap tag when no prior version exists: `v0.1.0`
+- Subsequent releases increment the patch version from the latest `v*` tag
 
-Each release runs the test suite, publishes a `win-x64` Release build, and attaches a zipped application bundle to the GitHub release.
+## Security and local config
 
-Environment variables:
-
-- `APPDATA`
-  Default install root source. On this machine that resolves to a path like `C:\Users\DesertIce\AppData\Roaming`.
-- `TWITCHARCHIVIST_INSTALL_ROOT`
-  Optional explicit override for the install/publish directory root.
-
-The repo intentionally does not track live `appsettings.json` files anymore. Start from:
-
-- `src/TwitchArchivist/appsettings.example.json`
-- `src/TwitchArchivist/appsettings.Development.example.json`
-
-If `Downloader:ExecutablePath` is left blank, the app falls back to:
-
-- `%APPDATA%\\TwitchDownloaderCLI\\TwitchDownloaderCLI.exe`
+- Do not commit live `appsettings.json` files with real secrets.
+- Keep `TwitchDownloaderCLI.exe` outside the repo.
+- Treat the Twitch client secret like a password.
+- For service installs, ensure the configured downloader path and archive output directories are accessible to the Windows service account.
