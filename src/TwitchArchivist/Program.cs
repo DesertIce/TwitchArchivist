@@ -54,6 +54,7 @@ builder.Services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
 builder.Services.AddSingleton<ITwitchLiveStateSynchronizer, TwitchLiveStateSynchronizer>();
 builder.Services.AddSingleton<ITwitchDownloaderRunner, TwitchDownloaderRunner>();
 builder.Services.AddSingleton<IEventSubSubscriptionSynchronizer, EventSubSubscriptionSynchronizer>();
+builder.Services.AddSingleton<EventSubNotificationProcessor>();
 builder.Services.AddSingleton<EventSubConduitCleanupService>();
 builder.Services.AddTwitchLibEventSubWebsockets();
 builder.Services.AddSingleton<IEventSubWebsocketClient>(serviceProvider =>

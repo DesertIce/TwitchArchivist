@@ -9,6 +9,7 @@ namespace TwitchArchivist.Services.Twitch;
 public class EventSubConduitCoordinator(
     ITwitchHelixClient twitchHelixClient,
     IEventSubWebsocketClient websocketClientFactory,
+    EventSubNotificationProcessor notificationProcessor,
     IServiceScopeFactory scopeFactory,
     RuntimeStatusStore runtimeStatusStore,
     IOptions<TwitchOptions> twitchOptions,
@@ -262,6 +263,8 @@ public class EventSubConduitCoordinator(
         var shardClient = websocketClientFactory.CreateShardClient(shardId.ToString());
         shardClient.Disconnected += OnShardDisconnectedAsync;
         shardClient.ShardDisabled += OnShardDisabledAsync;
+        shardClient.StreamOnline += notificationProcessor.HandleStreamOnlineAsync;
+        shardClient.StreamOffline += notificationProcessor.HandleStreamOfflineAsync;
         _shardClients[shardId] = shardClient;
 
         await shardClient.ConnectAsync(EventSubEndpoint);

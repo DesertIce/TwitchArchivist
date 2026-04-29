@@ -10,6 +10,8 @@ public class EventSubscriptionState
 
     public string? TwitchSubscriptionId { get; set; }
 
+    public string? TransportSessionId { get; set; }
+
     public string Status { get; set; } = "unknown";
 
     public DateTimeOffset? LastVerifiedUtc { get; set; }

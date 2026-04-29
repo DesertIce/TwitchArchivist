@@ -57,7 +57,18 @@ public class EventSubSubscriptionSynchronizer(
         string sessionId,
         CancellationToken cancellationToken)
     {
-        var existing = remoteSubscriptions.FirstOrDefault(x =>
+        var entity = await dbContext.EventSubscriptionStates
+            .SingleOrDefaultAsync(
+                x => x.ChannelConfigurationId == channel.Id && x.SubscriptionType == subscriptionType,
+                cancellationToken);
+
+        var existing = entity is not null && !string.IsNullOrWhiteSpace(entity.TwitchSubscriptionId)
+            ? remoteSubscriptions.FirstOrDefault(x =>
+                string.Equals(x.Id, entity.TwitchSubscriptionId, StringComparison.Ordinal) &&
+                string.Equals(x.TransportSessionId, sessionId, StringComparison.Ordinal))
+            : null;
+
+        existing ??= remoteSubscriptions.FirstOrDefault(x =>
             string.Equals(x.Type, subscriptionType, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.BroadcasterUserId, channel.TwitchUserId, StringComparison.Ordinal) &&
             string.Equals(x.TransportSessionId, sessionId, StringComparison.Ordinal));
@@ -71,11 +82,6 @@ public class EventSubSubscriptionSynchronizer(
                 cancellationToken);
         }
 
-        var entity = await dbContext.EventSubscriptionStates
-            .SingleOrDefaultAsync(
-                x => x.ChannelConfigurationId == channel.Id && x.SubscriptionType == subscriptionType,
-                cancellationToken);
-
         if (entity is null)
         {
             entity = new EventSubscriptionState
@@ -88,6 +94,7 @@ public class EventSubSubscriptionSynchronizer(
         }
 
         entity.TwitchSubscriptionId = existing.Id;
+        entity.TransportSessionId = existing.TransportSessionId ?? sessionId;
         entity.Status = existing.Status;
         entity.LastVerifiedUtc = DateTimeOffset.UtcNow;
         entity.UpdatedUtc = DateTimeOffset.UtcNow;

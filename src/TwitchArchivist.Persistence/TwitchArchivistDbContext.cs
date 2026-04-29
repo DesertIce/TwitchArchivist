@@ -35,6 +35,7 @@ public class TwitchArchivistDbContext(DbContextOptions<TwitchArchivistDbContext>
         {
             entity.Property(x => x.SubscriptionType).HasMaxLength(128);
             entity.Property(x => x.TwitchSubscriptionId).HasMaxLength(128);
+            entity.Property(x => x.TransportSessionId).HasMaxLength(128);
             entity.Property(x => x.Status).HasMaxLength(64);
             entity.HasIndex(x => new { x.ChannelConfigurationId, x.SubscriptionType }).IsUnique();
             entity.HasOne(x => x.ChannelConfiguration)

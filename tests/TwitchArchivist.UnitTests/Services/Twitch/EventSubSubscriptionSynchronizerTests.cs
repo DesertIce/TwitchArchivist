@@ -55,12 +55,14 @@ public class EventSubSubscriptionSynchronizerTests
                 Assert.Equal("stream.offline", state.SubscriptionType);
                 Assert.Equal("enabled", state.Status);
                 Assert.Equal("sub-stream.offline", state.TwitchSubscriptionId);
+                Assert.Equal("session-123", state.TransportSessionId);
             },
             state =>
             {
                 Assert.Equal("stream.online", state.SubscriptionType);
                 Assert.Equal("enabled", state.Status);
                 Assert.Equal("sub-stream.online", state.TwitchSubscriptionId);
+                Assert.Equal("session-123", state.TransportSessionId);
             });
     }
 
@@ -97,6 +99,89 @@ public class EventSubSubscriptionSynchronizerTests
 
         Assert.Equal(2, helixClient.CreatedWebsocketSubscriptions.Count);
         Assert.All(helixClient.CreatedWebsocketSubscriptions, x => Assert.Equal("current-session", x.SessionId));
+    }
+
+    [Fact]
+    public async Task EnsureSubscriptionsAsyncUpdatesPersistedTransportSessionIdWhenReconnectFindsCurrentSessionSubscriptions()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            var channel = new ChannelConfiguration
+            {
+                TwitchLogin = "seretuscumbia",
+                TwitchUserId = "29430843",
+                OutputDirectory = Path.GetTempPath(),
+                IsEnabled = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+            dbContext.ChannelConfigurations.Add(channel);
+            await dbContext.SaveChangesAsync();
+
+            dbContext.EventSubscriptionStates.AddRange(
+                new EventSubscriptionState
+                {
+                    ChannelConfigurationId = channel.Id,
+                    SubscriptionType = "stream.online",
+                    TwitchSubscriptionId = "old-online",
+                    TransportSessionId = "old-session",
+                    Status = "enabled",
+                    LastVerifiedUtc = now,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                },
+                new EventSubscriptionState
+                {
+                    ChannelConfigurationId = channel.Id,
+                    SubscriptionType = "stream.offline",
+                    TwitchSubscriptionId = "old-offline",
+                    TransportSessionId = "old-session",
+                    Status = "enabled",
+                    LastVerifiedUtc = now,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var helixClient = new StubTwitchHelixClient
+        {
+            ExistingSubscriptions =
+            [
+                new EventSubSubscriptionRecord("current-online", "stream.online", "enabled", "29430843", "current-session"),
+                new EventSubSubscriptionRecord("current-offline", "stream.offline", "enabled", "29430843", "current-session")
+            ]
+        };
+        var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "websocket");
+
+        await synchronizer.EnsureSubscriptionsAsync("current-session", CancellationToken.None);
+
+        Assert.Empty(helixClient.CreatedWebsocketSubscriptions);
+
+        await using var verificationScope = database.Services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var states = await verificationDbContext.EventSubscriptionStates
+            .OrderBy(x => x.SubscriptionType)
+            .ToListAsync();
+
+        Assert.Collection(
+            states,
+            state =>
+            {
+                Assert.Equal("stream.offline", state.SubscriptionType);
+                Assert.Equal("current-offline", state.TwitchSubscriptionId);
+                Assert.Equal("current-session", state.TransportSessionId);
+            },
+            state =>
+            {
+                Assert.Equal("stream.online", state.SubscriptionType);
+                Assert.Equal("current-online", state.TwitchSubscriptionId);
+                Assert.Equal("current-session", state.TransportSessionId);
+            });
     }
 
     [Fact]

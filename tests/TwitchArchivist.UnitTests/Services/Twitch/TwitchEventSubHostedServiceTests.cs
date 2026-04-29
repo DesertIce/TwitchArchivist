@@ -98,8 +98,7 @@ public class TwitchEventSubHostedServiceTests
             websocketClient,
             new StubAccessTokenProvider(),
             subscriptionSynchronizer,
-            database.Services.GetRequiredService<IServiceScopeFactory>(),
-            new NoOpArchiveJobQueue(),
+            CreateNotificationProcessor(database.Services, new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
             NullLogger<TwitchEventSubHostedService>.Instance,
             options,
@@ -142,8 +141,7 @@ public class TwitchEventSubHostedServiceTests
             websocketClient,
             new StubAccessTokenProvider(),
             subscriptionSynchronizer,
-            database.Services.GetRequiredService<IServiceScopeFactory>(),
-            new NoOpArchiveJobQueue(),
+            CreateNotificationProcessor(database.Services, new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
             NullLogger<TwitchEventSubHostedService>.Instance,
             options,
@@ -186,8 +184,7 @@ public class TwitchEventSubHostedServiceTests
                 new StubTwitchHelixClient(),
                 database.Services.GetRequiredService<IServiceScopeFactory>(),
                 Options.Create(new TwitchOptions())),
-            database.Services.GetRequiredService<IServiceScopeFactory>(),
-            new NoOpArchiveJobQueue(),
+            CreateNotificationProcessor(database.Services, new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
             NullLogger<TwitchEventSubHostedService>.Instance,
             options,
@@ -221,8 +218,7 @@ public class TwitchEventSubHostedServiceTests
             websocketClient,
             new StubAccessTokenProvider(),
             subscriptionSynchronizer,
-            database.Services.GetRequiredService<IServiceScopeFactory>(),
-            new NoOpArchiveJobQueue(),
+            CreateNotificationProcessor(database.Services, new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
             NullLogger<TwitchEventSubHostedService>.Instance,
             options,
@@ -257,8 +253,7 @@ public class TwitchEventSubHostedServiceTests
             websocketClient,
             new StubAccessTokenProvider(),
             subscriptionSynchronizer,
-            database.Services.GetRequiredService<IServiceScopeFactory>(),
-            new NoOpArchiveJobQueue(),
+            CreateNotificationProcessor(database.Services, new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
             NullLogger<TwitchEventSubHostedService>.Instance,
             options,
@@ -293,8 +288,7 @@ public class TwitchEventSubHostedServiceTests
             websocketClient,
             new StubAccessTokenProvider(),
             subscriptionSynchronizer,
-            database.Services.GetRequiredService<IServiceScopeFactory>(),
-            new NoOpArchiveJobQueue(),
+            CreateNotificationProcessor(database.Services, new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
             NullLogger<TwitchEventSubHostedService>.Instance,
             options,
@@ -354,14 +348,25 @@ public class TwitchEventSubHostedServiceTests
                 new StubTwitchHelixClient(),
                 services.GetRequiredService<IServiceScopeFactory>(),
                 Options.Create(new TwitchOptions())),
-            services.GetRequiredService<IServiceScopeFactory>(),
-            archiveJobQueue ?? new NoOpArchiveJobQueue(),
+            CreateNotificationProcessor(services, archiveJobQueue ?? new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
             logger ?? NullLogger<TwitchEventSubHostedService>.Instance,
             options,
             TimeProvider.System,
             monitorInterval ?? TimeSpan.FromMilliseconds(50));
     }
+
+    private static EventSubNotificationProcessor CreateNotificationProcessor(IServiceProvider services, IArchiveJobQueue archiveJobQueue)
+        => new(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            archiveJobQueue,
+            NullLogger<EventSubNotificationProcessor>.Instance,
+            Options.Create(new TwitchOptions
+            {
+                EventSubRetryBaseDelaySeconds = 1,
+                EventSubRetryMaxDelaySeconds = 2
+            }),
+            TimeProvider.System);
 
     private static async Task<int> SeedChannelAsync(IServiceProvider services, string login, string twitchUserId)
     {

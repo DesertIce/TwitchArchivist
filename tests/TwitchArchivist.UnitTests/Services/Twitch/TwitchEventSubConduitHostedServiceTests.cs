@@ -15,6 +15,43 @@ namespace TwitchArchivist.UnitTests.Services.Twitch;
 public class TwitchEventSubConduitHostedServiceTests
 {
     [Fact]
+    public async Task ConduitShardStreamOfflineCreatesArchiveJob()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            dbContext.ChannelConfigurations.Add(new ChannelConfiguration
+            {
+                TwitchLogin = "seretuscumbia",
+                TwitchUserId = "29430843",
+                OutputDirectory = Path.GetTempPath(),
+                IsEnabled = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var helixClient = new RecordingHelixClient();
+        var websocketFactory = new FakeEventSubWebsocketClient(["session-0"]);
+        var coordinator = CreateCoordinator(database.Services, helixClient, websocketFactory, shardCount: 1);
+
+        await coordinator.StartAsync(CancellationToken.None);
+        var shardClient = Assert.Single(websocketFactory.CreatedShardClients);
+
+        await shardClient.TriggerStreamOfflineAsync("seretuscumbia", "29430843");
+
+        await using var verificationScope = database.Services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var jobs = await verificationDbContext.ArchiveJobs.ToListAsync();
+
+        Assert.Single(jobs);
+    }
+
+    [Fact]
     public async Task StartAsyncCreatesConduitAssignmentsAndPersistsShardState()
     {
         await using var database = await CreateDatabaseAsync();
@@ -102,6 +139,7 @@ public class TwitchEventSubConduitHostedServiceTests
         return new EventSubConduitCoordinator(
             helixClient,
             websocketClient,
+            CreateNotificationProcessor(services),
             services.GetRequiredService<IServiceScopeFactory>(),
             new RuntimeStatusStore(),
             Options.Create(new TwitchOptions
@@ -112,6 +150,18 @@ public class TwitchEventSubConduitHostedServiceTests
             NullLogger<EventSubConduitCoordinator>.Instance,
             TimeProvider.System);
     }
+
+    private static EventSubNotificationProcessor CreateNotificationProcessor(IServiceProvider services)
+        => new(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new NoOpArchiveJobQueue(),
+            NullLogger<EventSubNotificationProcessor>.Instance,
+            Options.Create(new TwitchOptions
+            {
+                EventSubRetryBaseDelaySeconds = 1,
+                EventSubRetryMaxDelaySeconds = 2
+            }),
+            TimeProvider.System);
 
     private static EventSubConduitCleanupService CreateCleanupService(IServiceProvider services, ITwitchHelixClient helixClient)
         => new(
@@ -216,6 +266,7 @@ public class TwitchEventSubConduitHostedServiceTests
     private sealed class FakeEventSubWebsocketClient(IReadOnlyList<string> sessionIds) : IEventSubWebsocketClient
     {
         private int _createIndex;
+        public List<FakeEventSubShardClient> CreatedShardClients { get; } = [];
 
         public string? SessionId => null;
         public event Func<object?, EventSubConnectedEventArgs, Task>? Connected;
@@ -229,7 +280,9 @@ public class TwitchEventSubConduitHostedServiceTests
         public IEventSubShardClient CreateShardClient(string shardKey)
         {
             var sessionId = sessionIds[_createIndex++];
-            return new FakeEventSubShardClient(shardKey, sessionId);
+            var shardClient = new FakeEventSubShardClient(shardKey, sessionId);
+            CreatedShardClients.Add(shardClient);
+            return shardClient;
         }
 
         public Task<bool> ConnectAsync(Uri endpoint) => throw new NotSupportedException();
@@ -265,6 +318,14 @@ public class TwitchEventSubConduitHostedServiceTests
 
         public Task<bool> ReconnectAsync() => Task.FromResult(true);
         public Task<bool> DisconnectAsync() => Task.FromResult(true);
+
+        public async Task TriggerStreamOfflineAsync(string broadcasterUserLogin, string broadcasterUserId)
+        {
+            if (StreamOffline is not null)
+            {
+                await StreamOffline.Invoke(this, new EventSubStreamOfflineEventArgs(broadcasterUserLogin, broadcasterUserId));
+            }
+        }
     }
 
     private sealed class TestDatabase(IServiceProvider services, SqliteConnection connection) : IAsyncDisposable
@@ -283,6 +344,17 @@ public class TwitchEventSubConduitHostedServiceTests
             }
 
             await connection.DisposeAsync();
+        }
+    }
+
+    private sealed class NoOpArchiveJobQueue : IArchiveJobQueue
+    {
+        public ValueTask EnqueueAsync(int archiveJobId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+        public async IAsyncEnumerable<int> ReadAllAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.CompletedTask;
+            yield break;
         }
     }
 }

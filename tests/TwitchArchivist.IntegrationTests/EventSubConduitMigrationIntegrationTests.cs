@@ -39,6 +39,7 @@ public class EventSubConduitMigrationIntegrationTests
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
         Assert.Equal(2, dbContext.EventSubscriptionStates.Count());
+        Assert.All(dbContext.EventSubscriptionStates, x => Assert.Equal("session-direct", x.TransportSessionId));
         Assert.Empty(dbContext.EventSubSubscriptionBindings);
     }
 

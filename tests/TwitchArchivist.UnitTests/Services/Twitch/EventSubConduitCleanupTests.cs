@@ -94,6 +94,7 @@ public class EventSubConduitCleanupTests
         return new EventSubConduitCoordinator(
             helixClient,
             websocketClient,
+            CreateNotificationProcessor(services),
             services.GetRequiredService<IServiceScopeFactory>(),
             new RuntimeStatusStore(),
             Options.Create(new TwitchOptions
@@ -105,6 +106,18 @@ public class EventSubConduitCleanupTests
             NullLogger<EventSubConduitCoordinator>.Instance,
             TimeProvider.System);
     }
+
+    private static EventSubNotificationProcessor CreateNotificationProcessor(IServiceProvider services)
+        => new(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new NoOpArchiveJobQueue(),
+            NullLogger<EventSubNotificationProcessor>.Instance,
+            Options.Create(new TwitchOptions
+            {
+                EventSubRetryBaseDelaySeconds = 1,
+                EventSubRetryMaxDelaySeconds = 2
+            }),
+            TimeProvider.System);
 
     private static EventSubConduitCleanupService CreateCleanupService(
         IServiceProvider services,
@@ -259,6 +272,17 @@ public class EventSubConduitCleanupTests
         public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ReconcileAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpArchiveJobQueue : IArchiveJobQueue
+    {
+        public ValueTask EnqueueAsync(int archiveJobId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+        public async IAsyncEnumerable<int> ReadAllAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
     }
 
     private sealed class RateLimitedCoordinator : IEventSubConduitCoordinator
