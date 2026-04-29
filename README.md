@@ -74,6 +74,8 @@ This app uses both Twitch OAuth and Helix/EventSub APIs. You need a Twitch appli
 
 Create the Twitch app in the developer console at `https://dev.twitch.tv/console`, then register an OAuth redirect URI that matches the host and port where TwitchArchivist is actually running.
 
+The diagnostics page now walks through this setup, shows the current callback URL for the running host, and can save `Twitch:ClientId` and `Twitch:ClientSecret` directly into `appsettings.json`.
+
 Examples:
 
 - Development HTTP profile from `launchSettings.json`: `http://localhost:5222/auth/twitch/callback`
@@ -98,7 +100,17 @@ The resulting Twitch user token is stored in the SQLite-backed application state
 
 ## TwitchDownloaderCLI
 
-TwitchArchivist does not vendor the downloader binary. Install it separately from the upstream [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader) releases.
+The diagnostics page now supports one-click managed setup for `TwitchDownloaderCLI`. It downloads the latest Windows x64 CLI release from the upstream [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader) GitHub releases page, extracts it into the app directory, and saves the resolved executable path into `appsettings.json`.
+
+Managed install location:
+
+- `<app-root>\tools\TwitchDownloaderCLI\current\TwitchDownloaderCLI.exe`
+
+Managed install metadata:
+
+- `<app-root>\tools\TwitchDownloaderCLI\managed-install.json`
+
+If you prefer to manage the binary yourself, the app still supports a manual path.
 
 Expected setting:
 
@@ -130,7 +142,7 @@ Manual verification:
 & "C:\Tools\TwitchDownloaderCLI\TwitchDownloaderCLI.exe" --version
 ```
 
-The diagnostics page can also save the executable path and validates it by running `--version` and checking for a `TwitchDownloaderCLI ...` banner.
+The diagnostics page can either save a manual executable path or install the managed copy and validates the selected executable by running `--version` and checking for a `TwitchDownloaderCLI ...` banner.
 
 ## Local development
 

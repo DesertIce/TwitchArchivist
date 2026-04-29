@@ -46,6 +46,14 @@
     {
         <p class="field-hint">Downloader configuration saved.</p>
     }
+    else if (string.Equals(Model.SaveStatus, "installed", StringComparison.Ordinal))
+    {
+        <p class="field-hint">Managed TwitchDownloaderCLI installed and configured.</p>
+    }
+    else if (string.Equals(Model.SaveStatus, "twitch-saved", StringComparison.Ordinal))
+    {
+        <p class="field-hint">Twitch application credentials saved.</p>
+    }
 
     <div asp-validation-summary="ModelOnly"></div>
 
@@ -61,9 +69,11 @@
             <p class="field-hint">Select the server-visible `TwitchDownloaderCLI.exe` file.</p>
         </div>
         <div class="actions">
+            <button type="submit" asp-page-handler="InstallDownloader" class="button-ghost">Set up managed TwitchDownloaderCLI</button>
             <button type="submit" asp-page-handler="SaveDownloader">Save TwitchDownloaderCLI path</button>
         </div>
     </form>
+    <p class="field-hint">The managed setup downloads the latest Windows x64 TwitchDownloaderCLI release into <span class="mono">tools\TwitchDownloaderCLI\current</span> under this app directory and updates the configured executable path automatically.</p>
 </section>
 
 <section class="panel">
@@ -82,6 +92,44 @@
 
 <section class="panel">
     <h2>Twitch authorization</h2>
+    <p class="muted">Create a Twitch application, save its client credentials here, then start user authorization from this page.</p>
+
+    <div asp-validation-summary="ModelOnly"></div>
+
+    <ol class="field-hint">
+        <li>Open the <a href="https://dev.twitch.tv/console" target="_blank" rel="noreferrer">Twitch developer console</a>.</li>
+        <li>Create an application with an OAuth redirect URL that matches this running server exactly.</li>
+        <li>Save the client id and client secret below, then run the Twitch authorization flow.</li>
+    </ol>
+
+    <div class="field-hint">
+        Callback URL for this running app:
+        <span class="mono">@Model.TwitchOAuthCallbackUri</span>
+    </div>
+
+    <div class="field-hint">
+        Common development callbacks:
+        <span class="mono">http://localhost:5222/auth/twitch/callback</span>,
+        <span class="mono">https://localhost:7153/auth/twitch/callback</span>
+    </div>
+
+    <form method="post">
+        <div>
+            <label asp-for="Input.TwitchClientId"></label>
+            <input asp-for="Input.TwitchClientId" class="mono" autocomplete="off" />
+            <span asp-validation-for="Input.TwitchClientId"></span>
+        </div>
+        <div>
+            <label asp-for="Input.TwitchClientSecret"></label>
+            <input asp-for="Input.TwitchClientSecret" class="mono" type="password" autocomplete="new-password" />
+            <span asp-validation-for="Input.TwitchClientSecret"></span>
+            <p class="field-hint">Generating a new Twitch client secret invalidates the old one.</p>
+        </div>
+        <div class="actions">
+            <button type="submit" asp-page-handler="SaveTwitchApp">Save Twitch application credentials</button>
+        </div>
+    </form>
+
     <dl class="kv-card">
         <dt>Status</dt>
         <dd><span id="runtime-twitch-configured">@(Model.RuntimeStatus.TwitchUserAuthorizationConfigured ? "Configured" : "Missing")</span></dd>

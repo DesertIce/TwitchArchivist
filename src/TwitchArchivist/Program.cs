@@ -33,6 +33,13 @@ builder.Services.AddSingleton<IDownloaderConfigurationWriter>(serviceProvider =>
     var environment = serviceProvider.GetRequiredService<IHostEnvironment>();
     return new AppSettingsDownloaderConfigurationWriter(Path.Combine(environment.ContentRootPath, "appsettings.json"));
 });
+builder.Services.AddSingleton<ITwitchApplicationConfigurationWriter>(serviceProvider =>
+    (ITwitchApplicationConfigurationWriter)serviceProvider.GetRequiredService<IDownloaderConfigurationWriter>());
+builder.Services.AddHttpClient<IManagedTwitchDownloaderInstaller, ManagedTwitchDownloaderInstaller>(client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("TwitchArchivist/1.0");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+});
 builder.Services.AddHttpClient(nameof(TwitchAccessTokenProvider));
 builder.Services.AddHttpClient(nameof(TwitchHelixClient), client =>
 {

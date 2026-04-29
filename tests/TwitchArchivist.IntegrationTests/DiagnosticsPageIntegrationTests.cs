@@ -15,6 +15,9 @@ public class DiagnosticsPageIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Save TwitchDownloaderCLI path", payload);
+        Assert.Contains("Set up managed TwitchDownloaderCLI", payload);
+        Assert.Contains("Save Twitch application credentials", payload);
+        Assert.Contains("Twitch developer console", payload);
         Assert.Contains("data-file-picker=\"true\"", payload);
         Assert.Contains("data-file-picker-button=\"true\"", payload);
         Assert.Contains("data-file-picker-portal=\"true\"", payload);
