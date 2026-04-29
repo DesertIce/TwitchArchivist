@@ -5,6 +5,8 @@ namespace TwitchArchivist.Services.Twitch;
 public class TwitchEventSubConduitHostedService(
     IEventSubConduitCoordinator conduitCoordinator,
     EventSubConduitCleanupService cleanupService,
+    IEventSubSubscriptionSynchronizer subscriptionSynchronizer,
+    ILogger<TwitchEventSubConduitHostedService> logger,
     Microsoft.Extensions.Options.IOptions<TwitchOptions> twitchOptions) : IHostedService
 {
     private readonly TimeSpan _reconcileInterval = TimeSpan.FromSeconds(Math.Max(1, twitchOptions.Value.EventSubConduitReconcileIntervalSeconds));
@@ -14,6 +16,7 @@ public class TwitchEventSubConduitHostedService(
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await conduitCoordinator.StartAsync(cancellationToken);
+        await EnsureSubscriptionsSafeAsync(cancellationToken);
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _backgroundTask = RunCleanupLoopAsync(_cancellationTokenSource.Token);
     }
@@ -47,11 +50,32 @@ public class TwitchEventSubConduitHostedService(
             {
                 await Task.Delay(_reconcileInterval, cancellationToken);
                 await cleanupService.RunOnceAsync(cancellationToken);
+                await EnsureSubscriptionsSafeAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed during EventSub conduit maintenance loop");
+            }
+        }
+    }
+
+    private async Task EnsureSubscriptionsSafeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await subscriptionSynchronizer.EnsureSubscriptionsAsync(string.Empty, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to reconcile EventSub conduit subscriptions for enabled channels");
         }
     }
 }

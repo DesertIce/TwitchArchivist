@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
 using TwitchArchivist.Persistence;
@@ -99,6 +100,60 @@ public class EventSubSubscriptionSynchronizerTests
 
         Assert.Equal(2, helixClient.CreatedWebsocketSubscriptions.Count);
         Assert.All(helixClient.CreatedWebsocketSubscriptions, x => Assert.Equal("current-session", x.SessionId));
+    }
+
+    [Fact]
+    public async Task EnsureSubscriptionsAsyncContinuesPastFailingChannelInDirectMode()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            dbContext.ChannelConfigurations.AddRange(
+                new ChannelConfiguration
+                {
+                    TwitchLogin = "broken-channel",
+                    TwitchUserId = "111",
+                    OutputDirectory = Path.GetTempPath(),
+                    IsEnabled = true,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                },
+                new ChannelConfiguration
+                {
+                    TwitchLogin = "working-channel",
+                    TwitchUserId = "222",
+                    OutputDirectory = Path.GetTempPath(),
+                    IsEnabled = true,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var helixClient = new StubTwitchHelixClient
+        {
+            FailCreateFor =
+            [
+                ("stream.online", "111")
+            ]
+        };
+        var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "websocket");
+
+        await synchronizer.EnsureSubscriptionsAsync("session-123", CancellationToken.None);
+
+        await using var verificationScope = database.Services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var states = await verificationDbContext.EventSubscriptionStates
+            .Include(x => x.ChannelConfiguration)
+            .OrderBy(x => x.ChannelConfiguration.TwitchLogin)
+            .ThenBy(x => x.SubscriptionType)
+            .ToListAsync();
+
+        Assert.DoesNotContain(states, x => x.ChannelConfiguration.TwitchLogin == "broken-channel");
+        Assert.Equal(2, states.Count(x => x.ChannelConfiguration.TwitchLogin == "working-channel"));
     }
 
     [Fact]
@@ -258,6 +313,67 @@ public class EventSubSubscriptionSynchronizerTests
     }
 
     [Fact]
+    public async Task EnsureSubscriptionsAsyncContinuesPastFailingChannelInConduitMode()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            dbContext.EventSubConduits.Add(new EventSubConduit
+            {
+                TwitchConduitId = "conduit-1",
+                ShardCount = 1,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+            dbContext.ChannelConfigurations.AddRange(
+                new ChannelConfiguration
+                {
+                    TwitchLogin = "broken-channel",
+                    TwitchUserId = "111",
+                    OutputDirectory = Path.GetTempPath(),
+                    IsEnabled = true,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                },
+                new ChannelConfiguration
+                {
+                    TwitchLogin = "working-channel",
+                    TwitchUserId = "222",
+                    OutputDirectory = Path.GetTempPath(),
+                    IsEnabled = true,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var helixClient = new StubTwitchHelixClient
+        {
+            FailCreateConduitFor =
+            [
+                ("stream.online", "111")
+            ]
+        };
+        var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "conduit-websocket");
+
+        await synchronizer.EnsureSubscriptionsAsync(string.Empty, CancellationToken.None);
+
+        await using var verificationScope = database.Services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var bindings = await verificationDbContext.EventSubSubscriptionBindings
+            .Include(x => x.ChannelConfiguration)
+            .OrderBy(x => x.ChannelConfiguration.TwitchLogin)
+            .ThenBy(x => x.SubscriptionType)
+            .ToListAsync();
+
+        Assert.DoesNotContain(bindings, x => x.ChannelConfiguration.TwitchLogin == "broken-channel");
+        Assert.Equal(2, bindings.Count(x => x.ChannelConfiguration.TwitchLogin == "working-channel"));
+    }
+
+    [Fact]
     public async Task EnsureSubscriptionsAsyncMarksDisabledChannelBindingsStaleWithoutTouchingEnabledChannelBindings()
     {
         await using var database = await CreateDatabaseAsync();
@@ -352,6 +468,7 @@ public class EventSubSubscriptionSynchronizerTests
         return new EventSubSubscriptionSynchronizer(
             helixClient,
             services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EventSubSubscriptionSynchronizer>.Instance,
             Options.Create(new TwitchOptions
             {
                 EventSubTransportMode = transportMode
@@ -403,15 +520,27 @@ public class EventSubSubscriptionSynchronizerTests
         public IReadOnlyList<EventSubSubscriptionRecord> ExistingSubscriptions { get; init; } = [];
         public List<(string SubscriptionType, string BroadcasterUserId, string SessionId)> CreatedWebsocketSubscriptions { get; } = [];
         public List<(string SubscriptionType, string BroadcasterUserId, string ConduitId)> CreatedConduitSubscriptions { get; } = [];
+        public HashSet<(string SubscriptionType, string BroadcasterUserId)> FailCreateFor { get; init; } = [];
+        public HashSet<(string SubscriptionType, string BroadcasterUserId)> FailCreateConduitFor { get; init; } = [];
 
         public Task<EventSubSubscriptionRecord> CreateStreamSubscriptionAsync(string subscriptionType, string broadcasterUserId, string sessionId, CancellationToken cancellationToken)
         {
+            if (FailCreateFor.Contains((subscriptionType, broadcasterUserId)))
+            {
+                throw new InvalidOperationException($"boom-{subscriptionType}-{broadcasterUserId}");
+            }
+
             CreatedWebsocketSubscriptions.Add((subscriptionType, broadcasterUserId, sessionId));
             return Task.FromResult(new EventSubSubscriptionRecord($"sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId, sessionId));
         }
 
         public Task<EventSubSubscriptionRecord> CreateConduitSubscriptionAsync(string subscriptionType, string broadcasterUserId, string conduitId, CancellationToken cancellationToken)
         {
+            if (FailCreateConduitFor.Contains((subscriptionType, broadcasterUserId)))
+            {
+                throw new InvalidOperationException($"boom-{subscriptionType}-{broadcasterUserId}");
+            }
+
             CreatedConduitSubscriptions.Add((subscriptionType, broadcasterUserId, conduitId));
             return Task.FromResult(new EventSubSubscriptionRecord($"conduit-sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId, null));
         }

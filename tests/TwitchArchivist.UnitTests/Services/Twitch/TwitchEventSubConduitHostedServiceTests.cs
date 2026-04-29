@@ -61,6 +61,8 @@ public class TwitchEventSubConduitHostedServiceTests
         var service = new TwitchEventSubConduitHostedService(
             coordinator,
             CreateCleanupService(database.Services, helixClient),
+            new CountingSubscriptionSynchronizer(),
+            NullLogger<TwitchEventSubConduitHostedService>.Instance,
             Options.Create(new TwitchOptions
             {
                 EventSubTransportMode = "conduit-websocket",
@@ -110,6 +112,8 @@ public class TwitchEventSubConduitHostedServiceTests
         var service = new TwitchEventSubConduitHostedService(
             coordinator,
             CreateCleanupService(database.Services, helixClient),
+            new CountingSubscriptionSynchronizer(),
+            NullLogger<TwitchEventSubConduitHostedService>.Instance,
             Options.Create(new TwitchOptions
             {
                 EventSubTransportMode = "conduit-websocket",
@@ -128,6 +132,74 @@ public class TwitchEventSubConduitHostedServiceTests
 
         Assert.Equal(3, conduit.ShardCount);
         Assert.Equal(3, conduit.Shards.Count);
+    }
+
+    [Fact]
+    public async Task StartAsyncEnsuresConduitSubscriptionsForEnabledChannels()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            dbContext.ChannelConfigurations.Add(new ChannelConfiguration
+            {
+                TwitchLogin = "seretuscumbia",
+                TwitchUserId = "29430843",
+                OutputDirectory = Path.GetTempPath(),
+                IsEnabled = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var helixClient = new RecordingHelixClient();
+        var websocketFactory = new FakeEventSubWebsocketClient(["session-0"]);
+        var subscriptionSynchronizer = new CountingSubscriptionSynchronizer();
+        var coordinator = CreateCoordinator(database.Services, helixClient, websocketFactory, shardCount: 1);
+        var service = new TwitchEventSubConduitHostedService(
+            coordinator,
+            CreateCleanupService(database.Services, helixClient),
+            subscriptionSynchronizer,
+            NullLogger<TwitchEventSubConduitHostedService>.Instance,
+            Options.Create(new TwitchOptions
+            {
+                EventSubTransportMode = "conduit-websocket",
+                EventSubConduitReconcileIntervalSeconds = 60
+            }));
+
+        await service.StartAsync(CancellationToken.None);
+
+        Assert.True(subscriptionSynchronizer.CallCount >= 1);
+        Assert.Contains(string.Empty, subscriptionSynchronizer.SessionIds);
+    }
+
+    [Fact]
+    public async Task BackgroundLoopContinuesAfterTransientSubscriptionSyncFailure()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var helixClient = new RecordingHelixClient();
+        var websocketFactory = new FakeEventSubWebsocketClient(["session-0"]);
+        var subscriptionSynchronizer = new FlakySubscriptionSynchronizer();
+        var coordinator = CreateCoordinator(database.Services, helixClient, websocketFactory, shardCount: 1);
+        var service = new TwitchEventSubConduitHostedService(
+            coordinator,
+            CreateCleanupService(database.Services, helixClient),
+            subscriptionSynchronizer,
+            NullLogger<TwitchEventSubConduitHostedService>.Instance,
+            Options.Create(new TwitchOptions
+            {
+                EventSubTransportMode = "conduit-websocket",
+                EventSubConduitReconcileIntervalSeconds = 1
+            }));
+
+        await service.StartAsync(CancellationToken.None);
+        await Task.Delay(1200);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(subscriptionSynchronizer.CallCount >= 2);
     }
 
     private static EventSubConduitCoordinator CreateCoordinator(
@@ -355,6 +427,35 @@ public class TwitchEventSubConduitHostedServiceTests
         {
             await Task.CompletedTask;
             yield break;
+        }
+    }
+
+    private sealed class CountingSubscriptionSynchronizer : IEventSubSubscriptionSynchronizer
+    {
+        public int CallCount { get; private set; }
+        public List<string> SessionIds { get; } = [];
+
+        public Task EnsureSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            SessionIds.Add(sessionId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FlakySubscriptionSynchronizer : IEventSubSubscriptionSynchronizer
+    {
+        public int CallCount { get; private set; }
+
+        public Task EnsureSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            if (CallCount == 1)
+            {
+                throw new InvalidOperationException("boom");
+            }
+
+            return Task.CompletedTask;
         }
     }
 }

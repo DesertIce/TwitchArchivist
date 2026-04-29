@@ -86,6 +86,7 @@ public class TwitchEventSubHostedServiceTests
         var subscriptionSynchronizer = new EventSubSubscriptionSynchronizer(
             new StubTwitchHelixClient(),
             database.Services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EventSubSubscriptionSynchronizer>.Instance,
             Options.Create(new TwitchOptions()));
         var options = Options.Create(new TwitchOptions
         {
@@ -129,6 +130,7 @@ public class TwitchEventSubHostedServiceTests
         var subscriptionSynchronizer = new EventSubSubscriptionSynchronizer(
             new StubTwitchHelixClient(),
             database.Services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EventSubSubscriptionSynchronizer>.Instance,
             Options.Create(new TwitchOptions()));
         var options = Options.Create(new TwitchOptions
         {
@@ -183,6 +185,7 @@ public class TwitchEventSubHostedServiceTests
             new EventSubSubscriptionSynchronizer(
                 new StubTwitchHelixClient(),
                 database.Services.GetRequiredService<IServiceScopeFactory>(),
+                NullLogger<EventSubSubscriptionSynchronizer>.Instance,
                 Options.Create(new TwitchOptions())),
             CreateNotificationProcessor(database.Services, new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),
@@ -347,6 +350,7 @@ public class TwitchEventSubHostedServiceTests
             subscriptionSynchronizer ?? new EventSubSubscriptionSynchronizer(
                 new StubTwitchHelixClient(),
                 services.GetRequiredService<IServiceScopeFactory>(),
+                NullLogger<EventSubSubscriptionSynchronizer>.Instance,
                 Options.Create(new TwitchOptions())),
             CreateNotificationProcessor(services, archiveJobQueue ?? new NoOpArchiveJobQueue()),
             new RuntimeStatusStore(),

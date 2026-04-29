@@ -9,6 +9,7 @@ namespace TwitchArchivist.Services.Twitch;
 public class EventSubSubscriptionSynchronizer(
     ITwitchHelixClient twitchHelixClient,
     IServiceScopeFactory scopeFactory,
+    ILogger<EventSubSubscriptionSynchronizer> logger,
     IOptions<TwitchOptions> twitchOptions) : IEventSubSubscriptionSynchronizer
 {
     public async Task EnsureSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
@@ -31,19 +32,35 @@ public class EventSubSubscriptionSynchronizer(
 
         foreach (var channel in channels)
         {
-            if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+            try
             {
-                channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, cancellationToken);
-                channel.UpdatedUtc = DateTimeOffset.UtcNow;
-            }
+                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                {
+                    channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, cancellationToken);
+                    channel.UpdatedUtc = DateTimeOffset.UtcNow;
+                }
 
-            if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                {
+                    continue;
+                }
+
+                await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.online", sessionId, cancellationToken);
+                await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.offline", sessionId, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "Failed to reconcile EventSub websocket subscriptions for channel {ChannelLogin} and broadcaster user id {BroadcasterUserId}",
+                    channel.TwitchLogin,
+                    channel.TwitchUserId);
                 continue;
             }
-
-            await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.online", sessionId, cancellationToken);
-            await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.offline", sessionId, cancellationToken);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -116,19 +133,35 @@ public class EventSubSubscriptionSynchronizer(
 
         foreach (var channel in channels.Where(x => x.IsEnabled))
         {
-            if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+            try
             {
-                channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, cancellationToken);
-                channel.UpdatedUtc = now;
-            }
+                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                {
+                    channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, cancellationToken);
+                    channel.UpdatedUtc = now;
+                }
 
-            if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                {
+                    continue;
+                }
+
+                await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.online", cancellationToken);
+                await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.offline", cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "Failed to reconcile EventSub conduit subscriptions for channel {ChannelLogin} and broadcaster user id {BroadcasterUserId}",
+                    channel.TwitchLogin,
+                    channel.TwitchUserId);
                 continue;
             }
-
-            await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.online", cancellationToken);
-            await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.offline", cancellationToken);
         }
 
         var disabledChannelIds = channels
