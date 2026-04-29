@@ -331,7 +331,8 @@ public class EventSubConduitMigrationIntegrationTests
                 subscriptionType,
                 "enabled",
                 broadcasterUserId,
-                sessionId);
+                sessionId,
+                null);
             CreatedDirectSubscriptions.Add(subscription);
             _subscriptions.Add(subscription);
             return Task.FromResult(subscription);
@@ -348,7 +349,8 @@ public class EventSubConduitMigrationIntegrationTests
                 subscriptionType,
                 "enabled",
                 broadcasterUserId,
-                null);
+                null,
+                conduitId);
             CreatedConduitSubscriptions.Add(subscription);
             _subscriptions.Add(subscription);
             return Task.FromResult(subscription);

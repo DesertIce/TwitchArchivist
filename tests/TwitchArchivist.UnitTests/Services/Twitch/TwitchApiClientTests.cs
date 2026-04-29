@@ -52,7 +52,7 @@ public class TwitchApiClientTests
         var handler = new StubHttpMessageHandler(request =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
-            Assert.Equal("https://api.twitch.tv/helix/eventsub/subscriptions", request.RequestUri?.ToString());
+            Assert.Equal("https://api.twitch.tv/helix/eventsub/subscriptions?first=100", request.RequestUri?.ToString());
             Assert.Equal("Bearer test-token", request.Headers.Authorization?.ToString());
             Assert.Equal("client-id", request.Headers.GetValues("Client-Id").Single());
 
@@ -99,6 +99,104 @@ public class TwitchApiClientTests
         Assert.Equal("12345", subscription.BroadcasterUserId);
         Assert.Equal("stream.online", subscription.Type);
         Assert.Equal("session-123", subscription.TransportSessionId);
+        Assert.Null(subscription.TransportConduitId);
+    }
+
+    [Fact]
+    public async Task HelixClientGetsAllEventSubscriptionsAcrossPages()
+    {
+        var requests = new Queue<Func<HttpRequestMessage, HttpResponseMessage>>([
+            request =>
+            {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal("https://api.twitch.tv/helix/eventsub/subscriptions?first=100", request.RequestUri?.ToString());
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "data": [
+                            {
+                              "id": "sub-1",
+                              "type": "stream.online",
+                              "status": "enabled",
+                              "transport": {
+                                "conduit_id": "conduit-1"
+                              },
+                              "condition": {
+                                "broadcaster_user_id": "12345"
+                              }
+                            }
+                          ],
+                          "pagination": {
+                            "cursor": "cursor-2"
+                          }
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            },
+            request =>
+            {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal("https://api.twitch.tv/helix/eventsub/subscriptions?first=100&after=cursor-2", request.RequestUri?.ToString());
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "data": [
+                            {
+                              "id": "sub-2",
+                              "type": "stream.offline",
+                              "status": "enabled",
+                              "transport": {
+                                "conduit_id": "conduit-1"
+                              },
+                              "condition": {
+                                "broadcaster_user_id": "12345"
+                              }
+                            }
+                          ],
+                          "pagination": {}
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+        ]);
+        var handler = new StubHttpMessageHandler(request => requests.Dequeue().Invoke(request));
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.twitch.tv/helix/")
+        };
+        var factory = new StubHttpClientFactory(client);
+        var authProvider = new StubAccessTokenProvider();
+        var options = Options.Create(new TwitchOptions
+        {
+            ClientId = "client-id"
+        });
+
+        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+
+        var subscriptions = await helixClient.GetEventSubscriptionsAsync(CancellationToken.None);
+
+        Assert.Collection(
+            subscriptions,
+            subscription =>
+            {
+                Assert.Equal("sub-1", subscription.Id);
+                Assert.Equal("conduit-1", subscription.TransportConduitId);
+            },
+            subscription =>
+            {
+                Assert.Equal("sub-2", subscription.Id);
+                Assert.Equal("conduit-1", subscription.TransportConduitId);
+            });
     }
 
     [Fact]

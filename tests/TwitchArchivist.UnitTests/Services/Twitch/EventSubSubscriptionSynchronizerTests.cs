@@ -90,8 +90,8 @@ public class EventSubSubscriptionSynchronizerTests
         {
             ExistingSubscriptions =
             [
-                new EventSubSubscriptionRecord("old-online", "stream.online", "enabled", "29430843", "old-session"),
-                new EventSubSubscriptionRecord("old-offline", "stream.offline", "enabled", "29430843", "old-session")
+                new EventSubSubscriptionRecord("old-online", "stream.online", "enabled", "29430843", "old-session", null),
+                new EventSubSubscriptionRecord("old-offline", "stream.offline", "enabled", "29430843", "old-session", null)
             ]
         };
         var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "websocket");
@@ -207,8 +207,8 @@ public class EventSubSubscriptionSynchronizerTests
         {
             ExistingSubscriptions =
             [
-                new EventSubSubscriptionRecord("current-online", "stream.online", "enabled", "29430843", "current-session"),
-                new EventSubSubscriptionRecord("current-offline", "stream.offline", "enabled", "29430843", "current-session")
+                new EventSubSubscriptionRecord("current-online", "stream.online", "enabled", "29430843", "current-session", null),
+                new EventSubSubscriptionRecord("current-offline", "stream.offline", "enabled", "29430843", "current-session", null)
             ]
         };
         var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "websocket");
@@ -250,8 +250,8 @@ public class EventSubSubscriptionSynchronizerTests
         {
             ExistingSubscriptions =
             [
-                new EventSubSubscriptionRecord("sub-stream.online", "stream.online", "enabled", "29430843", null),
-                new EventSubSubscriptionRecord("sub-stream.offline", "stream.offline", "enabled", "29430843", null)
+                new EventSubSubscriptionRecord("sub-stream.online", "stream.online", "enabled", "29430843", null, "conduit-1"),
+                new EventSubSubscriptionRecord("sub-stream.offline", "stream.offline", "enabled", "29430843", null, "conduit-1")
             ]
         };
         var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "conduit-websocket");
@@ -310,6 +310,39 @@ public class EventSubSubscriptionSynchronizerTests
                 Assert.Equal("conduit-sub-stream.online", binding.TwitchSubscriptionId);
                 Assert.Equal("enabled", binding.Status);
             });
+    }
+
+    [Fact]
+    public async Task EnsureSubscriptionsAsyncDoesNotReuseSubscriptionFromDifferentConduit()
+    {
+        await using var database = await CreateDatabaseAsync();
+
+        await SeedConduitScenarioAsync(database.Services);
+
+        var helixClient = new StubTwitchHelixClient
+        {
+            ExistingSubscriptions =
+            [
+                new EventSubSubscriptionRecord("other-online", "stream.online", "enabled", "29430843", null, "conduit-2"),
+                new EventSubSubscriptionRecord("other-offline", "stream.offline", "enabled", "29430843", null, "conduit-2")
+            ]
+        };
+        var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "conduit-websocket");
+
+        await synchronizer.EnsureSubscriptionsAsync("ignored-shard-session", CancellationToken.None);
+
+        Assert.Equal(2, helixClient.CreatedConduitSubscriptions.Count);
+
+        await using var scope = database.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var bindings = await dbContext.EventSubSubscriptionBindings
+            .OrderBy(x => x.SubscriptionType)
+            .ToListAsync();
+
+        Assert.Collection(
+            bindings,
+            binding => Assert.Equal("conduit-sub-stream.offline", binding.TwitchSubscriptionId),
+            binding => Assert.Equal("conduit-sub-stream.online", binding.TwitchSubscriptionId));
     }
 
     [Fact]
@@ -439,8 +472,8 @@ public class EventSubSubscriptionSynchronizerTests
         {
             ExistingSubscriptions =
             [
-                new EventSubSubscriptionRecord("enabled-online", "stream.online", "enabled", "111", null),
-                new EventSubSubscriptionRecord("enabled-offline", "stream.offline", "enabled", "111", null)
+                new EventSubSubscriptionRecord("enabled-online", "stream.online", "enabled", "111", null, "conduit-1"),
+                new EventSubSubscriptionRecord("enabled-offline", "stream.offline", "enabled", "111", null, "conduit-1")
             ]
         };
         var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "conduit-websocket");
@@ -531,7 +564,7 @@ public class EventSubSubscriptionSynchronizerTests
             }
 
             CreatedWebsocketSubscriptions.Add((subscriptionType, broadcasterUserId, sessionId));
-            return Task.FromResult(new EventSubSubscriptionRecord($"sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId, sessionId));
+            return Task.FromResult(new EventSubSubscriptionRecord($"sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId, sessionId, null));
         }
 
         public Task<EventSubSubscriptionRecord> CreateConduitSubscriptionAsync(string subscriptionType, string broadcasterUserId, string conduitId, CancellationToken cancellationToken)
@@ -542,7 +575,7 @@ public class EventSubSubscriptionSynchronizerTests
             }
 
             CreatedConduitSubscriptions.Add((subscriptionType, broadcasterUserId, conduitId));
-            return Task.FromResult(new EventSubSubscriptionRecord($"conduit-sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId, null));
+            return Task.FromResult(new EventSubSubscriptionRecord($"conduit-sub-{subscriptionType}", subscriptionType, "enabled", broadcasterUserId, null, conduitId));
         }
 
         public Task<IReadOnlyList<EventSubSubscriptionRecord>> GetEventSubscriptionsAsync(CancellationToken cancellationToken)

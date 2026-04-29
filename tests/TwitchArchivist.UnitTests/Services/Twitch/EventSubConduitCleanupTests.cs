@@ -60,8 +60,8 @@ public class EventSubConduitCleanupTests
         {
             ExistingSubscriptions =
             [
-                new EventSubSubscriptionRecord("delete-me", "stream.online", "enabled", "123", "legacy-session"),
-                new EventSubSubscriptionRecord("keep-me", "stream.online", "enabled", "999", "legacy-session")
+                new EventSubSubscriptionRecord("delete-me", "stream.online", "enabled", "123", "legacy-session", null),
+                new EventSubSubscriptionRecord("keep-me", "stream.online", "enabled", "999", "legacy-session", null)
             ]
         };
         var cleanupService = CreateCleanupService(database.Services, helixClient, new NoOpCoordinator(), transportMode: "conduit-websocket");

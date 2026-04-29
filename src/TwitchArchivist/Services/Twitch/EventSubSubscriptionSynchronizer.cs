@@ -206,7 +206,8 @@ public class EventSubSubscriptionSynchronizer(
         existing ??= remoteSubscriptions.FirstOrDefault(x =>
             string.Equals(x.Type, subscriptionType, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.BroadcasterUserId, channel.TwitchUserId, StringComparison.Ordinal) &&
-            string.IsNullOrWhiteSpace(x.TransportSessionId));
+            string.IsNullOrWhiteSpace(x.TransportSessionId) &&
+            string.Equals(x.TransportConduitId, conduit.TwitchConduitId, StringComparison.Ordinal));
 
         if (existing is null)
         {

@@ -5,4 +5,5 @@ public sealed record EventSubSubscriptionRecord(
     string Type,
     string Status,
     string? BroadcasterUserId,
-    string? TransportSessionId);
+    string? TransportSessionId,
+    string? TransportConduitId);

@@ -110,17 +110,35 @@ public class TwitchHelixClient(
 
     public async Task<IReadOnlyList<EventSubSubscriptionRecord>> GetEventSubscriptionsAsync(CancellationToken cancellationToken)
     {
-        var response = await SendHelixAsync<HelixEnvelope<SubscriptionRecord>>(
-            "/eventsub/subscriptions",
-            HttpMethod.Get,
-            body: null,
-            useUserAccessToken: true,
-            requestContext: "listing EventSub subscriptions",
-            cancellationToken);
+        var subscriptions = new List<EventSubSubscriptionRecord>();
+        string? cursor = null;
 
-        return response?.Data
-            .Select(x => new EventSubSubscriptionRecord(x.Id, x.Type, x.Status, x.Condition.BroadcasterUserId, x.Transport.SessionId))
-            .ToList() ?? [];
+        do
+        {
+            var relativePath = cursor is null
+                ? "/eventsub/subscriptions?first=100"
+                : $"/eventsub/subscriptions?first=100&after={Uri.EscapeDataString(cursor)}";
+
+            var response = await SendHelixAsync<HelixEnvelope<SubscriptionRecord>>(
+                relativePath,
+                HttpMethod.Get,
+                body: null,
+                useUserAccessToken: true,
+                requestContext: cursor is null
+                    ? "listing EventSub subscriptions"
+                    : $"listing EventSub subscriptions after={cursor}",
+                cancellationToken);
+
+            if (response?.Data is not null)
+            {
+                subscriptions.AddRange(response.Data.Select(MapEventSubSubscriptionRecord));
+            }
+
+            cursor = response?.Pagination?.Cursor;
+        }
+        while (!string.IsNullOrWhiteSpace(cursor));
+
+        return subscriptions;
     }
 
     public Task DeleteEventSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken)
@@ -256,7 +274,7 @@ public class TwitchHelixClient(
         var record = response?.Data.FirstOrDefault()
             ?? throw new InvalidOperationException("Twitch did not return the created EventSub subscription.");
 
-        return new EventSubSubscriptionRecord(record.Id, record.Type, record.Status, record.Condition.BroadcasterUserId, record.Transport.SessionId);
+        return MapEventSubSubscriptionRecord(record);
     }
 
     public async Task<EventSubSubscriptionRecord> CreateConduitSubscriptionAsync(
@@ -291,8 +309,17 @@ public class TwitchHelixClient(
         var record = response?.Data.FirstOrDefault()
             ?? throw new InvalidOperationException($"Twitch did not return the created EventSub conduit subscription for conduit_id={conduitId}.");
 
-        return new EventSubSubscriptionRecord(record.Id, record.Type, record.Status, record.Condition.BroadcasterUserId, record.Transport.SessionId);
+        return MapEventSubSubscriptionRecord(record);
     }
+
+    private static EventSubSubscriptionRecord MapEventSubSubscriptionRecord(SubscriptionRecord record)
+        => new(
+            record.Id,
+            record.Type,
+            record.Status,
+            record.Condition.BroadcasterUserId,
+            record.Transport.SessionId,
+            record.Transport.ConduitId);
 
     private static EventSubConduitRecord MapConduitRecord(ConduitRecord record)
         => new(
@@ -368,6 +395,15 @@ public class TwitchHelixClient(
     private sealed class HelixEnvelope<TRecord>
     {
         public List<TRecord> Data { get; set; } = [];
+
+        [JsonPropertyName("pagination")]
+        public HelixPagination? Pagination { get; set; }
+    }
+
+    private sealed class HelixPagination
+    {
+        [JsonPropertyName("cursor")]
+        public string? Cursor { get; set; }
     }
 
     private sealed class UserRecord
