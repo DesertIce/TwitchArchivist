@@ -200,6 +200,84 @@ public class TwitchApiClientTests
     }
 
     [Fact]
+    public async Task HelixClientUsesAppTokenToListConduitSubscriptions()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            Assert.Equal("Bearer app-token", request.Headers.Authorization?.ToString());
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [],
+                      "pagination": {}
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.twitch.tv/helix/")
+        };
+        var factory = new StubHttpClientFactory(client);
+        var authProvider = new StubAccessTokenProvider("user-token", "app-token");
+        var options = Options.Create(new TwitchOptions
+        {
+            ClientId = "client-id",
+            EventSubTransportMode = "conduit-websocket"
+        });
+
+        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+
+        var subscriptions = await helixClient.GetEventSubscriptionsAsync(CancellationToken.None);
+
+        Assert.Empty(subscriptions);
+    }
+
+    [Fact]
+    public async Task HelixClientUsesUserTokenToListWebsocketSubscriptions()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            Assert.Equal("Bearer user-token", request.Headers.Authorization?.ToString());
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [],
+                      "pagination": {}
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.twitch.tv/helix/")
+        };
+        var factory = new StubHttpClientFactory(client);
+        var authProvider = new StubAccessTokenProvider("user-token", "app-token");
+        var options = Options.Create(new TwitchOptions
+        {
+            ClientId = "client-id",
+            EventSubTransportMode = "websocket"
+        });
+
+        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+
+        var subscriptions = await helixClient.GetEventSubscriptionsAsync(CancellationToken.None);
+
+        Assert.Empty(subscriptions);
+    }
+
+    [Fact]
     public async Task HelixClientSkipsArchiveVideosCreatedBeforeTheCurrentStream()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -663,7 +741,7 @@ public class TwitchApiClientTests
         return new TwitchHelixClient(factory, authProvider, options);
     }
 
-    private sealed class StubAccessTokenProvider : ITwitchAccessTokenProvider
+    private sealed class StubAccessTokenProvider(string userToken = "test-token", string appToken = "test-token") : ITwitchAccessTokenProvider
     {
         public string? BuildUserAuthorizationUrl(string state, string redirectUri) => null;
 
@@ -671,10 +749,10 @@ public class TwitchApiClientTests
             => Task.CompletedTask;
 
         public Task<string?> GetAppAccessTokenAsync(CancellationToken cancellationToken)
-            => Task.FromResult<string?>("test-token");
+            => Task.FromResult<string?>(appToken);
 
         public Task<string?> GetUserAccessTokenAsync(CancellationToken cancellationToken)
-            => Task.FromResult<string?>("test-token");
+            => Task.FromResult<string?>(userToken);
 
         public Task<TwitchUserAuthorizationState> GetUserAuthorizationStateAsync(CancellationToken cancellationToken)
             => Task.FromResult(new TwitchUserAuthorizationState(false, false, "missing", null, false, null, null, null, null));

@@ -112,6 +112,10 @@ public class TwitchHelixClient(
     {
         var subscriptions = new List<EventSubSubscriptionRecord>();
         string? cursor = null;
+        var useUserAccessToken = !string.Equals(
+            twitchOptions.Value.EventSubTransportMode,
+            "conduit-websocket",
+            StringComparison.OrdinalIgnoreCase);
 
         do
         {
@@ -123,7 +127,7 @@ public class TwitchHelixClient(
                 relativePath,
                 HttpMethod.Get,
                 body: null,
-                useUserAccessToken: true,
+                useUserAccessToken,
                 requestContext: cursor is null
                     ? "listing EventSub subscriptions"
                     : $"listing EventSub subscriptions after={cursor}",
