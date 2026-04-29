@@ -14,6 +14,8 @@ public class IndexModel(TwitchArchivistDbContext dbContext, RuntimeStatusStore r
 
     public int JobCount { get; private set; }
 
+    public int FailedJobCount { get; private set; }
+
     public List<ArchiveJob> RecentJobs { get; private set; } = [];
 
     public RuntimeStatusStore RuntimeStatus => runtimeStatusStore;
@@ -24,7 +26,7 @@ public class IndexModel(TwitchArchivistDbContext dbContext, RuntimeStatusStore r
 
     public string TwitchAuthorizationBadgeClass => runtimeStatusStore.TwitchUserAuthorizationValidity switch
     {
-        "valid" => string.Empty,
+        "valid" => "success",
         "expiring-soon" => "warn",
         _ => "danger"
     };
@@ -38,6 +40,7 @@ public class IndexModel(TwitchArchivistDbContext dbContext, RuntimeStatusStore r
         ChannelCount = await dbContext.ChannelConfigurations.CountAsync();
         EnabledChannelCount = await dbContext.ChannelConfigurations.CountAsync(x => x.IsEnabled);
         JobCount = await dbContext.ArchiveJobs.CountAsync();
+        FailedJobCount = await dbContext.ArchiveJobs.CountAsync(x => x.Status == ArchiveJobStatus.Failed);
         RecentJobs = await dbContext.ArchiveJobs
             .Include(x => x.ChannelConfiguration)
             .OrderByDescending(x => x.Id)

@@ -1,53 +1,96 @@
 @page
 @using TwitchArchivist.Pages
+@using TwitchArchivist.Pages.Jobs
 @model TwitchArchivist.Pages.Jobs.IndexModel
 @{
     ViewData["Title"] = "Jobs";
 }
 
-<section class="panel">
-    <h2>Archive jobs</h2>
-    <p class="muted">Showing the 50 most recent jobs.</p>
+<section class="panel" data-live-panel="jobs">
+    <div class="panel-header-row">
+        <div>
+            <h2>Archive jobs</h2>
+            <p class="muted">Showing the @IndexModel.PageSize most recent jobs@(Model.HasActiveFilter ? " matching the current filter." : ".")</p>
+        </div>
+    </div>
+
+    <form method="get" class="toolbar">
+        <div class="toolbar-group">
+            <div>
+                <label asp-for="Status">Status</label>
+                <select asp-for="Status" asp-items="Model.StatusOptions" data-auto-submit="true"></select>
+            </div>
+            <div>
+                <label asp-for="Channel">Channel</label>
+                <select asp-for="Channel" data-auto-submit="true">
+                    <option value="">All channels</option>
+                    @foreach (var option in Model.ChannelOptions)
+                    {
+                        <option value="@option.Value" selected="@(string.Equals(option.Value, Model.Channel, StringComparison.OrdinalIgnoreCase))">@option.Text</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="toolbar-group">
+            <button type="submit">Apply filter</button>
+            @if (Model.HasActiveFilter)
+            {
+                <a class="button-ghost" asp-page="/Jobs/Index">Clear</a>
+            }
+        </div>
+    </form>
+
     @if (Model.Jobs.Count == 0)
     {
         <div class="empty-state">
-            <h3>No archive jobs yet</h3>
-            <p>Jobs will appear here when a configured channel goes live or a manual archive is triggered.</p>
+            <h3>No archive jobs match</h3>
+            <p>@(Model.HasActiveFilter ? "Try adjusting the filter or clearing it." : "Jobs will appear here when a configured channel goes live or a manual archive is triggered.")</p>
+            @if (Model.HasActiveFilter)
+            {
+                <a class="button-link" asp-page="/Jobs/Index">Clear filter</a>
+            }
         </div>
     }
     else
     {
-        <table>
-            <thead>
-                <tr>
-                    <th>Channel</th>
-                    <th>Status</th>
-                    <th>Trigger</th>
-                    <th>Created</th>
-                    <th>Error</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var job in Model.Jobs)
-            {
-                <tr>
-                    <td>@job.ChannelConfiguration.TwitchLogin</td>
-                    <td><span class="badge @UiBadges.JobStatusBadgeClass(job.Status)">@UiBadges.JobStatusLabel(job.Status)</span></td>
-                    <td>@job.TriggerSource</td>
-                    <td><span class="mono">@job.CreatedUtc.ToString("u")</span></td>
-                    <td>
-                        @if (job.LastError is not null)
-                        {
-                            <span class="mono">@job.LastError</span>
-                        }
-                        else
-                        {
-                            @:-
-                        }
-                    </td>
-                </tr>
-            }
-            </tbody>
-        </table>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Channel</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Trigger</th>
+                        <th scope="col">Created</th>
+                        <th scope="col">Duration</th>
+                        <th scope="col">Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var job in Model.Jobs)
+                {
+                    <tr>
+                        <td>@job.ChannelConfiguration.TwitchLogin</td>
+                        <td><span class="badge @UiBadges.JobStatusBadgeClass(job.Status)">@UiBadges.JobStatusLabel(job.Status)</span></td>
+                        <td><span class="badge neutral">@job.TriggerSource</span></td>
+                        <td>
+                            <span class="relative-time" data-utc="@job.CreatedUtc.ToString("u")"></span>
+                            <div class="muted mono">@job.CreatedUtc.ToString("u")</div>
+                        </td>
+                        <td><span class="mono">@IndexModel.FormatDuration(job)</span></td>
+                        <td>
+                            @if (job.LastError is not null)
+                            {
+                                <span class="mono">@job.LastError</span>
+                            }
+                            else
+                            {
+                                <span class="muted">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
     }
 </section>

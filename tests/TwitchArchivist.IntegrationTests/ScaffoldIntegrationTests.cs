@@ -30,8 +30,13 @@ public class ScaffoldIntegrationTests
         Assert.True(response.IsSuccessStatusCode);
         Assert.Contains("Service overview", payload);
         Assert.Contains("Recent jobs", payload);
-        Assert.Contains("color-scheme: dark", payload);
+        Assert.Contains("/css/site.css", payload);
         Assert.Contains("/auth/twitch/start", payload);
+
+        var cssResponse = await client.GetAsync("/css/site.css");
+        var css = await cssResponse.Content.ReadAsStringAsync();
+        Assert.True(cssResponse.IsSuccessStatusCode);
+        Assert.Contains("color-scheme: dark", css);
     }
 
     [Fact]

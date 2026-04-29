@@ -14,11 +14,11 @@
 
     <form method="post">
         <div class="form-grid">
-            <div>
+            <div class="autocomplete-wrap" data-twitch-login-wrap="true">
                 <label asp-for="Input.TwitchLogin"></label>
                 <input asp-for="Input.TwitchLogin" autocomplete="off" spellcheck="false" data-twitch-login-autocomplete="true" data-twitch-login-min-length="4" />
-                <span asp-validation-for="Input.TwitchLogin"></span>
                 <ul class="autocomplete-list" data-twitch-login-suggestions="true" hidden></ul>
+                <span asp-validation-for="Input.TwitchLogin"></span>
                 <p class="field-hint">The lowercase Twitch username, without the URL or @@ symbol.</p>
             </div>
             <div>
@@ -27,12 +27,14 @@
                     <input asp-for="Input.OutputDirectory" data-directory-picker="true" />
                     <button type="button" class="button-ghost" data-directory-picker-button="true">Browse</button>
                 </div>
-                <p class="field-hint" data-directory-picker-status="true" hidden></p>
                 <span asp-validation-for="Input.OutputDirectory"></span>
                 <p class="field-hint">Absolute path to the folder where downloaded VODs will be stored. Example: <span class="mono">D:\twitch\archive\&lt;channel&gt;</span></p>
             </div>
             <div>
-                <label><input asp-for="Input.AutoPruneEnabled" /> @Html.DisplayNameFor(x => x.Input.AutoPruneEnabled)</label>
+                <label class="label-inline">
+                    <input asp-for="Input.AutoPruneEnabled" data-auto-prune-toggle="true" data-auto-prune-target="Input_AutoPruneVodCount" />
+                    <span>@Html.DisplayNameFor(x => x.Input.AutoPruneEnabled)</span>
+                </label>
                 <p class="field-hint">Off by default. When enabled, the mapping will delete older successful VOD files after new downloads complete.</p>
             </div>
             <div>

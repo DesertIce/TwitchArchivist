@@ -24,43 +24,58 @@
     }
     else
     {
-        <table>
-            <thead>
-                <tr>
-                    <th>Live</th>
-                    <th>Twitch login</th>
-                    <th>Output directory</th>
-                    <th>Enabled</th>
-                    <th>Auto prune</th>
-                    <th>Last live</th>
-                    <th>Updated</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var channel in Model.Channels)
-            {
-                <tr>
-                    <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsLive)">@(channel.IsLive ? "Live" : "Offline")</span></td>
-                    <td><span class="mono">@channel.TwitchLogin</span></td>
-                    <td><span class="mono">@channel.OutputDirectory</span></td>
-                    <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsEnabled)">@(channel.IsEnabled ? "Yes" : "No")</span></td>
-                    <td>
-                        @if (channel.AutoPruneEnabled)
-                        {
-                            <span>Keep @channel.AutoPruneVodCount</span>
-                        }
-                        else
-                        {
-                            <span class="muted">Off</span>
-                        }
-                    </td>
-                    <td><span class="mono">@(channel.LastLiveUtc?.ToString("u") ?? "Never")</span></td>
-                    <td><span class="mono">@channel.UpdatedUtc.ToString("u")</span></td>
-                    <td><a class="button-ghost" asp-page="/Channels/Edit" asp-route-id="@channel.Id">Edit</a></td>
-                </tr>
-            }
-            </tbody>
-        </table>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Live</th>
+                        <th scope="col">Twitch login</th>
+                        <th scope="col">Output directory</th>
+                        <th scope="col">Enabled</th>
+                        <th scope="col">Auto prune</th>
+                        <th scope="col">Last live</th>
+                        <th scope="col">Updated</th>
+                        <th scope="col"><span class="muted">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var channel in Model.Channels)
+                {
+                    <tr>
+                        <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsLive)">@(channel.IsLive ? "Live" : "Offline")</span></td>
+                        <td><span class="mono">@channel.TwitchLogin</span></td>
+                        <td><span class="mono">@channel.OutputDirectory</span></td>
+                        <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsEnabled)">@(channel.IsEnabled ? "Yes" : "No")</span></td>
+                        <td>
+                            @if (channel.AutoPruneEnabled)
+                            {
+                                <span>Keep @channel.AutoPruneVodCount</span>
+                            }
+                            else
+                            {
+                                <span class="muted">Off</span>
+                            }
+                        </td>
+                        <td>
+                            @if (channel.LastLiveUtc is { } lastLiveUtc)
+                            {
+                                <span class="relative-time" data-utc="@lastLiveUtc.ToString("u")"></span>
+                                <div class="muted mono">@lastLiveUtc.ToString("u")</div>
+                            }
+                            else
+                            {
+                                <span class="muted">Never</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="relative-time" data-utc="@channel.UpdatedUtc.ToString("u")"></span>
+                            <div class="muted mono">@channel.UpdatedUtc.ToString("u")</div>
+                        </td>
+                        <td><a class="button-ghost" asp-page="/Channels/Edit" asp-route-id="@channel.Id">Edit</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
     }
 </section>

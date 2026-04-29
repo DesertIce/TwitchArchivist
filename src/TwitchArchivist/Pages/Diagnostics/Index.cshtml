@@ -3,6 +3,8 @@
 @using TwitchArchivist.Pages
 @{ ViewData["Title"] = "Diagnostics"; }
 
+<div asp-validation-summary="ModelOnly"></div>
+
 <section class="panel">
     <div class="panel-header-row">
         <h2>Service health</h2>
@@ -17,14 +19,19 @@
 
         <dt>Downloader valid</dt>
         <dd><span class="badge @UiBadges.BoolBadgeClass(Model.RuntimeStatus.DownloaderExecutableValid)">@(Model.RuntimeStatus.DownloaderExecutableValid ? "Yes" : "No")</span></dd>
+    </dl>
+</section>
 
-        <dt>EventSub state</dt>
+<section class="panel">
+    <h2>EventSub</h2>
+    <dl class="kv-card">
+        <dt>Connection state</dt>
         <dd><span class="badge @UiBadges.EventSubBadgeClass(Model.RuntimeStatus.EventSubConnectionState)" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></dd>
 
-        <dt>EventSub transport</dt>
+        <dt>Transport</dt>
         <dd><span class="mono" id="runtime-eventsub-transport">@Model.RuntimeStatus.EventSubTransportMode</span></dd>
 
-        <dt>EventSub conduit</dt>
+        <dt>Conduit</dt>
         <dd><span class="mono" id="runtime-eventsub-conduit">@(Model.RuntimeStatus.EventSubConduitId ?? "Not assigned")</span></dd>
 
         <dt>Configured shards</dt>
@@ -35,6 +42,25 @@
 
         <dt>Disabled shards</dt>
         <dd><span class="mono" id="runtime-eventsub-disabled-shards">@Model.RuntimeStatus.EventSubDisabledShardCount</span></dd>
+
+        <dt>Last shard assignment error</dt>
+        <dd id="runtime-eventsub-shard-error">@(Model.RuntimeStatus.EventSubLastShardAssignmentError ?? "None")</dd>
+
+        <dt>Last subscription reconcile error</dt>
+        <dd id="runtime-eventsub-reconcile-error">@(Model.RuntimeStatus.EventSubLastSubscriptionReconcileError ?? "None")</dd>
+
+        <dt>Last rate limit</dt>
+        <dd>
+            @if (Model.RuntimeStatus.EventSubLastRateLimitUtc is { } rateLimitedUtc)
+            {
+                <span class="relative-time" data-utc="@rateLimitedUtc.ToString("u")" id="runtime-eventsub-rate-limit"></span>
+                <span class="muted mono">(@rateLimitedUtc.ToString("u"))</span>
+            }
+            else
+            {
+                <span class="mono" id="runtime-eventsub-rate-limit">Never</span>
+            }
+        </dd>
     </dl>
 </section>
 
@@ -42,20 +68,14 @@
     <h2>Downloader configuration</h2>
     <p class="muted">Save the full path to the `TwitchDownloaderCLI` executable here instead of editing `appsettings.json` manually.</p>
 
-    @if (string.Equals(Model.SaveStatus, "saved", StringComparison.Ordinal))
+    @if (string.Equals(Model.SaveStatus, TwitchArchivist.Pages.Diagnostics.IndexModel.SaveStatusDownloaderSaved, StringComparison.Ordinal))
     {
-        <p class="field-hint">Downloader configuration saved.</p>
+        <p class="field-hint success">Downloader configuration saved.</p>
     }
-    else if (string.Equals(Model.SaveStatus, "installed", StringComparison.Ordinal))
+    else if (string.Equals(Model.SaveStatus, TwitchArchivist.Pages.Diagnostics.IndexModel.SaveStatusDownloaderInstalled, StringComparison.Ordinal))
     {
-        <p class="field-hint">Managed TwitchDownloaderCLI installed and configured.</p>
+        <p class="field-hint success">Managed TwitchDownloaderCLI installed and configured.</p>
     }
-    else if (string.Equals(Model.SaveStatus, "twitch-saved", StringComparison.Ordinal))
-    {
-        <p class="field-hint">Twitch application credentials saved.</p>
-    }
-
-    <div asp-validation-summary="ModelOnly"></div>
 
     <form method="post">
         <div>
@@ -77,41 +97,62 @@
 </section>
 
 <section class="panel">
-    <h2>EventSub conduit diagnostics</h2>
-    <dl class="kv-card">
-        <dt>Last shard assignment error</dt>
-        <dd id="runtime-eventsub-shard-error">@(Model.RuntimeStatus.EventSubLastShardAssignmentError ?? "None")</dd>
-
-        <dt>Last subscription reconcile error</dt>
-        <dd id="runtime-eventsub-reconcile-error">@(Model.RuntimeStatus.EventSubLastSubscriptionReconcileError ?? "None")</dd>
-
-        <dt>Last rate limit</dt>
-        <dd><span class="mono" id="runtime-eventsub-rate-limit">@(Model.RuntimeStatus.EventSubLastRateLimitUtc?.ToString("u") ?? "Never")</span></dd>
-    </dl>
-</section>
-
-<section class="panel">
     <h2>Twitch authorization</h2>
     <p class="muted">Create a Twitch application, save its client credentials here, then start user authorization from this page.</p>
 
-    <div asp-validation-summary="ModelOnly"></div>
-
-    <ol class="field-hint">
+    <ol class="steps-list">
         <li>Open the <a href="https://dev.twitch.tv/console" target="_blank" rel="noreferrer">Twitch developer console</a>.</li>
         <li>Create an application with an OAuth redirect URL that matches this running server exactly.</li>
         <li>Save the client id and client secret below, then run the Twitch authorization flow.</li>
     </ol>
 
-    <div class="field-hint">
-        Callback URL for this running app:
-        <span class="mono">@Model.TwitchOAuthCallbackUri</span>
+    <div>
+        <label for="twitch-callback-current">Callback URL for this running app</label>
+        <div class="input-with-button">
+            <input id="twitch-callback-current"
+                   class="mono"
+                   type="text"
+                   value="@Model.TwitchOAuthCallbackUri"
+                   readonly
+                   data-copy-source="twitch-callback-current" />
+            <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-current">Copy</button>
+        </div>
     </div>
 
-    <div class="field-hint">
-        Common development callbacks:
-        <span class="mono">http://localhost:5222/auth/twitch/callback</span>,
-        <span class="mono">https://localhost:7153/auth/twitch/callback</span>
-    </div>
+    @if (Model.ShowDevCallbackUrls)
+    {
+        <div class="form-grid">
+            <div>
+                <label for="twitch-callback-http-dev">Development HTTP callback</label>
+                <div class="input-with-button">
+                    <input id="twitch-callback-http-dev"
+                           class="mono"
+                           type="text"
+                           value="http://localhost:5222/auth/twitch/callback"
+                           readonly
+                           data-copy-source="twitch-callback-http-dev" />
+                    <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-http-dev">Copy</button>
+                </div>
+            </div>
+            <div>
+                <label for="twitch-callback-https-dev">Development HTTPS callback</label>
+                <div class="input-with-button">
+                    <input id="twitch-callback-https-dev"
+                           class="mono"
+                           type="text"
+                           value="https://localhost:7153/auth/twitch/callback"
+                           readonly
+                           data-copy-source="twitch-callback-https-dev" />
+                    <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-https-dev">Copy</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (string.Equals(Model.SaveStatus, TwitchArchivist.Pages.Diagnostics.IndexModel.SaveStatusTwitchSaved, StringComparison.Ordinal))
+    {
+        <p class="field-hint success">Twitch application credentials saved.</p>
+    }
 
     <form method="post">
         <div>
@@ -121,7 +162,10 @@
         </div>
         <div>
             <label asp-for="Input.TwitchClientSecret"></label>
-            <input asp-for="Input.TwitchClientSecret" class="mono" type="password" autocomplete="new-password" />
+            <div class="password-toggle">
+                <input asp-for="Input.TwitchClientSecret" class="mono" type="password" value="@Model.Input.TwitchClientSecret" autocomplete="off" spellcheck="false" />
+                <button type="button" class="button-ghost" data-password-toggle="true" data-password-target="Input_TwitchClientSecret">Show</button>
+            </div>
             <span asp-validation-for="Input.TwitchClientSecret"></span>
             <p class="field-hint">Generating a new Twitch client secret invalidates the old one.</p>
         </div>
@@ -130,6 +174,7 @@
         </div>
     </form>
 
+    <h3 class="panel-subhead">User authorization status</h3>
     <dl class="kv-card">
         <dt>Status</dt>
         <dd><span id="runtime-twitch-configured">@(Model.RuntimeStatus.TwitchUserAuthorizationConfigured ? "Configured" : "Missing")</span></dd>

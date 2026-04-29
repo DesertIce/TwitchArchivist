@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
 using TwitchArchivist.Pages.Diagnostics;
@@ -22,7 +24,8 @@ public class IndexModelTests
             new FakeManagedTwitchDownloaderInstaller(),
             new FakeOptionsMonitor(new DownloaderOptions()),
             new FakeTwitchOptionsMonitor(new TwitchOptions()),
-            new FakeTwitchDownloaderBinaryVerifier())
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment())
         {
             Input = new IndexModel.InputModel
             {
@@ -50,7 +53,8 @@ public class IndexModelTests
             new FakeManagedTwitchDownloaderInstaller(),
             new FakeOptionsMonitor(new DownloaderOptions()),
             new FakeTwitchOptionsMonitor(new TwitchOptions()),
-            new FakeTwitchDownloaderBinaryVerifier())
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment())
         {
             Input = new IndexModel.InputModel
             {
@@ -85,7 +89,8 @@ public class IndexModelTests
             new FakeManagedTwitchDownloaderInstaller(),
             new FakeOptionsMonitor(new DownloaderOptions()),
             new FakeTwitchOptionsMonitor(new TwitchOptions()),
-            new FakeTwitchDownloaderBinaryVerifier());
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment());
 
         Assert.Equal("conduit-websocket", model.RuntimeStatus.EventSubTransportMode);
         Assert.Equal("conduit-123", model.RuntimeStatus.EventSubConduitId);
@@ -115,7 +120,8 @@ public class IndexModelTests
             installer,
             new FakeOptionsMonitor(new DownloaderOptions()),
             new FakeTwitchOptionsMonitor(new TwitchOptions()),
-            new FakeTwitchDownloaderBinaryVerifier());
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment());
 
         var result = await model.OnPostInstallDownloaderAsync(CancellationToken.None);
 
@@ -137,7 +143,8 @@ public class IndexModelTests
             new FakeManagedTwitchDownloaderInstaller(),
             new FakeOptionsMonitor(new DownloaderOptions()),
             new FakeTwitchOptionsMonitor(new TwitchOptions()),
-            new FakeTwitchDownloaderBinaryVerifier())
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment())
         {
             Input = new IndexModel.InputModel
             {
@@ -167,7 +174,8 @@ public class IndexModelTests
             new FakeManagedTwitchDownloaderInstaller(),
             new FakeOptionsMonitor(new DownloaderOptions()),
             new FakeTwitchOptionsMonitor(new TwitchOptions()),
-            new FakeTwitchDownloaderBinaryVerifier())
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment())
         {
             Input = new IndexModel.InputModel
             {
@@ -226,6 +234,14 @@ public class IndexModelTests
     {
         public Task<TwitchDownloaderBinaryVerificationResult> VerifyAsync(string? executablePath, CancellationToken cancellationToken)
             => Task.FromResult(new TwitchDownloaderBinaryVerificationResult(true, "verified"));
+    }
+
+    private sealed class FakeHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Production";
+        public string ApplicationName { get; set; } = "TwitchArchivist.Tests";
+        public string ContentRootPath { get; set; } = string.Empty;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed class FakeManagedTwitchDownloaderInstaller : IManagedTwitchDownloaderInstaller

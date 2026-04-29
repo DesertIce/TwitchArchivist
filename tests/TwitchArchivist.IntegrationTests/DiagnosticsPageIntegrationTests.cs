@@ -1,4 +1,7 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace TwitchArchivist.IntegrationTests;
 
@@ -18,9 +21,41 @@ public class DiagnosticsPageIntegrationTests
         Assert.Contains("Set up managed TwitchDownloaderCLI", payload);
         Assert.Contains("Save Twitch application credentials", payload);
         Assert.Contains("Twitch developer console", payload);
+        Assert.Contains("data-copy-button=\"true\"", payload);
+        Assert.Contains("data-copy-source=\"twitch-callback-current\"", payload);
+        Assert.Contains("data-copy-source=\"twitch-callback-http-dev\"", payload);
+        Assert.Contains("data-copy-source=\"twitch-callback-https-dev\"", payload);
         Assert.Contains("data-file-picker=\"true\"", payload);
         Assert.Contains("data-file-picker-button=\"true\"", payload);
         Assert.Contains("data-file-picker-portal=\"true\"", payload);
+    }
+
+    [Fact]
+    public async Task DiagnosticsPageRendersSavedTwitchCredentialsAndCallbackBlocks()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory(
+            configureBuilder: builder =>
+            {
+                builder.ConfigureServices(services =>
+                {
+                    services.RemoveAll<IHostedService>();
+                });
+            },
+            configurationOverrides: new Dictionary<string, string?>
+            {
+                ["Twitch:ClientId"] = "client-id-123",
+                ["Twitch:ClientSecret"] = "client-secret-456"
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/diagnostics");
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("value=\"client-id-123\"", payload);
+        Assert.Contains("value=\"client-secret-456\"", payload);
+        Assert.Contains("readonly", payload);
+        Assert.Contains("http://localhost/auth/twitch/callback", payload);
     }
 
     [Fact]

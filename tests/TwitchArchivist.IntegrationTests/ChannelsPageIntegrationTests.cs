@@ -42,10 +42,16 @@ public class ChannelsPageIntegrationTests
         var payload = await response.Content.ReadAsStringAsync();
 
         Assert.True(response.IsSuccessStatusCode);
-        Assert.Contains(".portal-body {", payload);
-        Assert.Contains("min-height: 0;", payload);
-        Assert.Contains(".portal-list {", payload);
-        Assert.Contains("overflow: auto;", payload);
+        Assert.Contains("/css/site.css", payload);
+        Assert.Contains("data-directory-picker-portal=\"true\"", payload);
+
+        var cssResponse = await client.GetAsync("/css/site.css");
+        var css = await cssResponse.Content.ReadAsStringAsync();
+        Assert.True(cssResponse.IsSuccessStatusCode);
+        Assert.Contains(".portal-body {", css);
+        Assert.Contains("min-height: 0;", css);
+        Assert.Contains(".portal-list {", css);
+        Assert.Contains("overflow: auto;", css);
     }
 
     [Fact]
@@ -62,10 +68,15 @@ public class ChannelsPageIntegrationTests
         Assert.Contains("data-auto-refresh-default-interval-seconds=\"120\"", payload);
         Assert.Contains("data-auto-refresh-toggle=\"true\"", payload);
         Assert.Contains("data-auto-refresh-interval=\"true\"", payload);
-        Assert.Contains("const initAutoRefresh = () => {", payload);
-        Assert.Contains("localStorage.getItem(\"twitchArchivist.autoRefresh.enabled\")", payload);
-        Assert.Contains("localStorage.getItem(\"twitchArchivist.autoRefresh.intervalSeconds\")", payload);
-        Assert.Contains("window.location.reload();", payload);
+        Assert.Contains("/js/site.js", payload);
+
+        var jsResponse = await client.GetAsync("/js/site.js");
+        var js = await jsResponse.Content.ReadAsStringAsync();
+        Assert.True(jsResponse.IsSuccessStatusCode);
+        Assert.Contains("initAutoRefresh", js);
+        Assert.Contains("twitchArchivist.autoRefresh.enabled", js);
+        Assert.Contains("twitchArchivist.autoRefresh.intervalSeconds", js);
+        Assert.Contains("window.location.reload();", js);
     }
 
     [Fact]
@@ -167,8 +178,8 @@ public class ChannelsPageIntegrationTests
         var payload = await response.Content.ReadAsStringAsync();
 
         Assert.True(response.IsSuccessStatusCode);
-        Assert.Contains("<th>Live</th>", payload);
-        Assert.Contains("<th>Last live</th>", payload);
+        Assert.Contains("<th scope=\"col\">Live</th>", payload);
+        Assert.Contains("<th scope=\"col\">Last live</th>", payload);
         Assert.Contains(">Live</span>", payload);
         Assert.Contains(">Offline</span>", payload);
         Assert.Contains("2026-04-28 17:45:00Z", payload);

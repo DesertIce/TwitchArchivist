@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
 using TwitchArchivist.Services;
@@ -15,8 +16,13 @@ public class IndexModel(
     IManagedTwitchDownloaderInstaller managedTwitchDownloaderInstaller,
     IOptionsMonitor<DownloaderOptions> downloaderOptions,
     IOptionsMonitor<TwitchOptions> twitchOptions,
-    ITwitchDownloaderBinaryVerifier twitchDownloaderBinaryVerifier) : PageModel
+    ITwitchDownloaderBinaryVerifier twitchDownloaderBinaryVerifier,
+    IHostEnvironment hostEnvironment) : PageModel
 {
+    public const string SaveStatusDownloaderSaved = "saved";
+    public const string SaveStatusDownloaderInstalled = "installed";
+    public const string SaveStatusTwitchSaved = "twitch-saved";
+
     public RuntimeStatusStore RuntimeStatus => runtimeStatusStore;
 
     [BindProperty]
@@ -25,9 +31,11 @@ public class IndexModel(
     [FromQuery]
     public string? SaveStatus { get; set; }
 
+    public bool ShowDevCallbackUrls => hostEnvironment.IsDevelopment();
+
     public string TwitchAuthorizationBadgeClass => runtimeStatusStore.TwitchUserAuthorizationValidity switch
     {
-        "valid" => string.Empty,
+        "valid" => "success",
         "expiring-soon" => "warn",
         _ => "danger"
     };
@@ -59,7 +67,7 @@ public class IndexModel(
         var verification = await twitchDownloaderBinaryVerifier.VerifyAsync(resolvedPath, cancellationToken);
         runtimeStatusStore.UpdateDownloaderValidation(resolvedPath, verification.IsValid, verification.Message);
 
-        SaveStatus = "saved";
+        SaveStatus = SaveStatusDownloaderSaved;
         return RedirectToPage("/Diagnostics/Index", new { saveStatus = SaveStatus });
     }
 
@@ -69,7 +77,7 @@ public class IndexModel(
         var verification = await twitchDownloaderBinaryVerifier.VerifyAsync(installResult.ExecutablePath, cancellationToken);
         runtimeStatusStore.UpdateDownloaderValidation(installResult.ExecutablePath, verification.IsValid, verification.Message);
 
-        SaveStatus = "installed";
+        SaveStatus = SaveStatusDownloaderInstalled;
         return RedirectToPage("/Diagnostics/Index", new { saveStatus = SaveStatus });
     }
 
@@ -98,7 +106,7 @@ public class IndexModel(
             normalizedClientSecret,
             cancellationToken);
 
-        SaveStatus = "twitch-saved";
+        SaveStatus = SaveStatusTwitchSaved;
         return RedirectToPage("/Diagnostics/Index", new { saveStatus = SaveStatus });
     }
 

@@ -6,7 +6,10 @@
 }
 
 <section class="panel">
-    <h2>Service overview</h2>
+    <div class="panel-header-row">
+        <h2>Service overview</h2>
+        <span class="heartbeat" id="runtime-relative"></span>
+    </div>
     <p class="muted">Local control surface for channel mappings, downloader configuration visibility, and archive job history.</p>
     <div class="grid">
         <div>
@@ -22,23 +25,35 @@
             <div class="metric">@Model.JobCount</div>
         </div>
         <div>
+            <div class="muted">Failed jobs</div>
+            <div class="metric @(Model.FailedJobCount > 0 ? "metric-danger" : string.Empty)">@Model.FailedJobCount</div>
+        </div>
+        <div>
             <div class="muted">Database</div>
             <div class="metric">@(Model.RuntimeStatus.DatabaseReady ? "Ready" : "Starting")</div>
         </div>
     </div>
-    <div class="heartbeat" id="runtime-relative"></div>
 </section>
 
 <section class="panel">
     <h2>Status</h2>
-    <p><strong>Downloader:</strong> <span class="badge @(Model.RuntimeStatus.DownloaderExecutableValid ? "success" : "warn")">@Model.DownloaderStatusLabel</span></p>
-    <p><strong>EventSub:</strong> <span class="badge @UiBadges.EventSubBadgeClass(Model.RuntimeStatus.EventSubConnectionState)" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></p>
-    <p><strong>Twitch OAuth:</strong> <span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.TwitchAuthorizationStatusLabel</span></p>
-    <p class="muted" id="runtime-twitch-detail">@Model.TwitchAuthorizationDetail</p>
-    <p>
+    <dl class="kv-card">
+        <dt>Downloader</dt>
+        <dd><span class="badge @(Model.RuntimeStatus.DownloaderExecutableValid ? "success" : "warn")">@Model.DownloaderStatusLabel</span></dd>
+
+        <dt>EventSub</dt>
+        <dd><span class="badge @UiBadges.EventSubBadgeClass(Model.RuntimeStatus.EventSubConnectionState)" id="runtime-eventsub-state">@Model.RuntimeStatus.EventSubConnectionState</span></dd>
+
+        <dt>Twitch OAuth</dt>
+        <dd><span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.TwitchAuthorizationStatusLabel</span></dd>
+
+        <dt>Detail</dt>
+        <dd class="muted" id="runtime-twitch-detail">@Model.TwitchAuthorizationDetail</dd>
+    </dl>
+    <div class="actions">
         <a class="button-link" href="/auth/twitch/start">Authorize Twitch</a>
-        <a class="button-link button-ghost" asp-page="/Diagnostics/Index">Open diagnostics →</a>
-    </p>
+        <a class="button-ghost" asp-page="/Diagnostics/Index">Open diagnostics →</a>
+    </div>
 </section>
 
 <section class="panel">
@@ -52,35 +67,40 @@
     }
     else
     {
-        <table>
-            <thead>
-                <tr>
-                    <th>Channel</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Output</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var job in Model.RecentJobs)
-            {
-                <tr>
-                    <td>@job.ChannelConfiguration.TwitchLogin</td>
-                    <td><span class="badge @UiBadges.JobStatusBadgeClass(job.Status)">@UiBadges.JobStatusLabel(job.Status)</span></td>
-                    <td><span class="mono">@job.CreatedUtc.ToString("u")</span></td>
-                    <td>
-                        @if (job.OutputPath is null)
-                        {
-                            <text>-</text>
-                        }
-                        else
-                        {
-                            <span class="mono">@job.OutputPath</span>
-                        }
-                    </td>
-                </tr>
-            }
-            </tbody>
-        </table>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Channel</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Created</th>
+                        <th scope="col">Output</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var job in Model.RecentJobs)
+                {
+                    <tr>
+                        <td>@job.ChannelConfiguration.TwitchLogin</td>
+                        <td><span class="badge @UiBadges.JobStatusBadgeClass(job.Status)">@UiBadges.JobStatusLabel(job.Status)</span></td>
+                        <td>
+                            <span class="relative-time" data-utc="@job.CreatedUtc.ToString("u")"></span>
+                            <div class="muted mono">@job.CreatedUtc.ToString("u")</div>
+                        </td>
+                        <td>
+                            @if (job.OutputPath is null)
+                            {
+                                <span class="muted">—</span>
+                            }
+                            else
+                            {
+                                <span class="mono">@job.OutputPath</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
     }
 </section>

@@ -4,7 +4,7 @@
     ViewData["Title"] = "Logs";
 }
 
-<section class="panel">
+<section class="panel" data-live-panel="logs">
     <h2>Recent logs</h2>
     <p class="muted">This buffer is in-memory only and is cleared on process restart.</p>
 
@@ -12,13 +12,33 @@
         <form method="get" class="toolbar-group">
             <div>
                 <label asp-for="MinimumLevel">Minimum level</label>
-                <select asp-for="MinimumLevel" asp-items="Model.LevelOptions"></select>
+                <select asp-for="MinimumLevel" asp-items="Model.LevelOptions" data-auto-submit="true"></select>
+            </div>
+            <div>
+                <label asp-for="Category">Category</label>
+                <select asp-for="Category" data-auto-submit="true">
+                    <option value="">All categories</option>
+                    @foreach (var option in Model.CategoryOptions)
+                    {
+                        <option value="@option.Value" selected="@(string.Equals(option.Value, Model.Category, StringComparison.Ordinal))">@option.Text</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label asp-for="Search">Search</label>
+                <input asp-for="Search" type="search" placeholder="Match message or exception" autocomplete="off" />
             </div>
             <button type="submit">Apply filter</button>
+            @if (Model.HasActiveFilter)
+            {
+                <a class="button-ghost" asp-page="/Logs/Index" asp-route-minimumLevel="@Model.MinimumLevel">Clear</a>
+            }
         </form>
 
         <form method="post">
             <input type="hidden" asp-for="MinimumLevel" />
+            <input type="hidden" asp-for="Category" />
+            <input type="hidden" asp-for="Search" />
             <button type="submit" class="button-danger" onclick="return confirm('Clear all log entries from the in-memory buffer?');">Clear buffer</button>
         </form>
     </div>
@@ -27,7 +47,7 @@
     {
         <div class="empty-state">
             <h3>No matching log entries</h3>
-            <p>Try lowering the minimum level or wait for new activity.</p>
+            <p>Try lowering the minimum level, clearing filters, or wait for new activity.</p>
         </div>
     }
     else

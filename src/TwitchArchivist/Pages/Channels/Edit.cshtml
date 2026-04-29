@@ -8,16 +8,17 @@
 <section class="panel">
     <p class="muted"><a asp-page="/Channels/Index">← Channels</a></p>
     <h2>Edit channel mapping</h2>
+
     <div asp-validation-summary="ModelOnly"></div>
 
     <form method="post">
         <input type="hidden" asp-for="Input.Id" />
         <div class="form-grid">
-            <div>
+            <div class="autocomplete-wrap" data-twitch-login-wrap="true">
                 <label asp-for="Input.TwitchLogin"></label>
                 <input asp-for="Input.TwitchLogin" autocomplete="off" spellcheck="false" data-twitch-login-autocomplete="true" data-twitch-login-min-length="4" />
-                <span asp-validation-for="Input.TwitchLogin"></span>
                 <ul class="autocomplete-list" data-twitch-login-suggestions="true" hidden></ul>
+                <span asp-validation-for="Input.TwitchLogin"></span>
                 <p class="field-hint">The lowercase Twitch username, without the URL or @@ symbol.</p>
             </div>
             <div>
@@ -26,12 +27,14 @@
                     <input asp-for="Input.OutputDirectory" data-directory-picker="true" />
                     <button type="button" class="button-ghost" data-directory-picker-button="true">Browse</button>
                 </div>
-                <p class="field-hint" data-directory-picker-status="true" hidden></p>
                 <span asp-validation-for="Input.OutputDirectory"></span>
                 <p class="field-hint">Absolute path to the folder where downloaded VODs will be stored. Example: <span class="mono">D:\twitch\archive\&lt;channel&gt;</span></p>
             </div>
             <div>
-                <label><input asp-for="Input.AutoPruneEnabled" /> @Html.DisplayNameFor(x => x.Input.AutoPruneEnabled)</label>
+                <label class="label-inline">
+                    <input asp-for="Input.AutoPruneEnabled" data-auto-prune-toggle="true" data-auto-prune-target="Input_AutoPruneVodCount" />
+                    <span>@Html.DisplayNameFor(x => x.Input.AutoPruneEnabled)</span>
+                </label>
                 <p class="field-hint">When enabled, older successful VOD files for this mapping are deleted after new downloads complete.</p>
             </div>
             <div>
@@ -40,16 +43,29 @@
                 <span asp-validation-for="Input.AutoPruneVodCount"></span>
                 <p class="field-hint">How many successful VOD files to retain for this mapping.</p>
             </div>
-        </div>
-        <div>
-            <label><input asp-for="Input.IsEnabled" /> Enabled</label>
+            <div>
+                <label class="label-inline">
+                    <input asp-for="Input.IsEnabled" />
+                    <span>Enabled</span>
+                </label>
+                <p class="field-hint">Disabled mappings stay configured but skip live detection and archiving.</p>
+            </div>
         </div>
         <div class="actions">
             <button type="submit">Save changes</button>
             <a class="button-ghost" asp-page="/Channels/Index">Back</a>
+        </div>
+    </form>
+</section>
+
+<section class="panel panel-danger">
+    <h3 class="danger-zone-title">Danger zone</h3>
+    <p class="muted">Deleting this mapping removes its archive history, stream session state, and EventSub subscription record. The downloaded VOD files on disk are not touched.</p>
+    <form method="post" asp-page-handler="Delete">
+        <input type="hidden" asp-for="Input.Id" />
+        <div class="actions">
             <button type="submit"
                     class="button-danger"
-                    asp-page-handler="Delete"
                     formnovalidate
                     onclick="return confirm('Delete this channel mapping and all associated archive history, stream state, and subscription data?');">
                 Delete mapping
