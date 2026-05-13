@@ -2,7 +2,7 @@
 
 TwitchArchivist is an ASP.NET Core 8 application for Windows that watches Twitch channels through EventSub, tracks archive jobs in SQLite, and downloads completed VODs with `TwitchDownloaderCLI`.
 
-It is designed to run as a Windows Service in production and as a normal ASP.NET Core app during development. The built-in web UI is the local operator surface for channel mappings, diagnostics, logs, and recent archive jobs.
+It is designed to run as a Windows Service in production and as a normal ASP.NET Core app during development. The built-in web UI is the local operator surface for channel mappings, diagnostics, logs, and recent archive jobs. When installed as a Windows Service with the stock scripts and config, the UI is at **`http://localhost:5000`** by default; local `dotnet run` uses different ports from `launchSettings.json` (see [Ports and listen URLs](#ports-and-listen-urls)).
 
 ## Current capabilities
 
@@ -78,6 +78,7 @@ The diagnostics page now walks through this setup, shows the current callback UR
 
 Examples:
 
+- Installed Windows Service (default listen URL; see [Ports and listen URLs](#ports-and-listen-urls)): `http://localhost:5000/auth/twitch/callback`
 - Development HTTP profile from `launchSettings.json`: `http://localhost:5222/auth/twitch/callback`
 - Development HTTPS profile from `launchSettings.json`: `https://localhost:7153/auth/twitch/callback`
 - If you override URLs or run behind a different port, use that exact callback instead
@@ -170,6 +171,21 @@ By default, local development uses the `launchSettings.json` profiles:
 
 - HTTP: `http://localhost:5222`
 - HTTPS: `https://localhost:7153`
+
+For how this differs from an installed Windows Service (including the default port), see [Ports and listen URLs](#ports-and-listen-urls).
+
+## Ports and listen URLs
+
+Use this when wiring the Twitch OAuth redirect URI, bookmarks, or reverse proxies.
+
+**Installed Windows Service** (`scripts/install-service.ps1`, published `TwitchArchivist.exe`):
+
+- Listens on **`http://localhost:5000`** by default. The service scripts do not set `ASPNETCORE_URLS`, and the checked-in `appsettings` files do not define Kestrel URLs, so Kestrel uses the ASP.NET Core default when no URL configuration is present.
+- To use another address or port, set **`ASPNETCORE_URLS`** (machine, user, or service environment) or otherwise configure application URLs per [ASP.NET Core URL configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints).
+
+**Local development** (`dotnet run`, Visual Studio / Rider):
+
+- Uses **`Properties/launchSettings.json`**, not the service defaults: HTTP **`5222`**, HTTPS **`7153`** (`http` / `https` profiles). IIS Express in that file uses **`5551`** for HTTP.
 
 ## Web UI
 
@@ -265,6 +281,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\update-service.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1 -RemovePublishDirectory
 ```
+
+After install, open the web UI at the [default service URL](#ports-and-listen-urls) unless you override URLs.
 
 Defaults:
 
