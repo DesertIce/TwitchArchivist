@@ -37,3 +37,6 @@ src/TwitchArchivist/appsettings.Development.json
 .worktrees/
 worktrees/
 .claude/settings.local.json
+
+# Cursor hook state (continual learning, etc.; machine-local)
+.cursor/hooks/state/
