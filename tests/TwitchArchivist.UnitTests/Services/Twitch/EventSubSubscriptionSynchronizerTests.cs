@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -272,6 +274,93 @@ public class EventSubSubscriptionSynchronizerTests
             bindings,
             binding => Assert.Equal("sub-stream.offline", binding.TwitchSubscriptionId),
             binding => Assert.Equal("sub-stream.online", binding.TwitchSubscriptionId));
+    }
+
+    [Fact]
+    public async Task EnsureConduitSubscriptionsAsyncReResolvesWhenStoredTwitchUserIdIsNotHelixFormat()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            dbContext.EventSubConduits.Add(new EventSubConduit
+            {
+                TwitchConduitId = "conduit-1",
+                ShardCount = 2,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+            dbContext.ChannelConfigurations.Add(new ChannelConfiguration
+            {
+                TwitchLogin = "seretuscumbia",
+                TwitchUserId = "seretuscumbia-resolved",
+                OutputDirectory = Path.GetTempPath(),
+                IsEnabled = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var helixClient = new StubTwitchHelixClient();
+        var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "conduit-websocket");
+
+        await synchronizer.EnsureSubscriptionsAsync("ignored-shard-session", CancellationToken.None);
+
+        Assert.Equal(2, helixClient.CreatedConduitSubscriptions.Count);
+        Assert.All(helixClient.CreatedConduitSubscriptions, x => Assert.Equal("29430843", x.BroadcasterUserId));
+
+        await using var verificationScope = database.Services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var channel = await verificationDbContext.ChannelConfigurations.SingleAsync();
+        Assert.Equal("29430843", channel.TwitchUserId);
+    }
+
+    [Fact]
+    public async Task EnsureConduitSubscriptionsAsyncClearsUserIdWhenHelixRejectsBroadcasterForEventSub()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            dbContext.EventSubConduits.Add(new EventSubConduit
+            {
+                TwitchConduitId = "conduit-1",
+                ShardCount = 1,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+            dbContext.ChannelConfigurations.Add(new ChannelConfiguration
+            {
+                TwitchLogin = "ghostuser",
+                TwitchUserId = "999999999",
+                OutputDirectory = Path.GetTempPath(),
+                IsEnabled = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var helixClient = new StubTwitchHelixClient
+        {
+            ThrowHttpBadRequestBroadcasterNotFoundForBroadcasterUserIds = ["999999999"]
+        };
+        var synchronizer = CreateSynchronizer(database.Services, helixClient, transportMode: "conduit-websocket");
+
+        await synchronizer.EnsureSubscriptionsAsync(string.Empty, CancellationToken.None);
+
+        Assert.Empty(helixClient.CreatedConduitSubscriptions);
+
+        await using var verificationScope = database.Services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var channel = await verificationDbContext.ChannelConfigurations.SingleAsync();
+        Assert.Null(channel.TwitchUserId);
+        Assert.Empty(await verificationDbContext.EventSubSubscriptionBindings.ToListAsync());
     }
 
     [Fact]
@@ -555,9 +644,15 @@ public class EventSubSubscriptionSynchronizerTests
         public List<(string SubscriptionType, string BroadcasterUserId, string ConduitId)> CreatedConduitSubscriptions { get; } = [];
         public HashSet<(string SubscriptionType, string BroadcasterUserId)> FailCreateFor { get; init; } = [];
         public HashSet<(string SubscriptionType, string BroadcasterUserId)> FailCreateConduitFor { get; init; } = [];
+        public HashSet<string> ThrowHttpBadRequestBroadcasterNotFoundForBroadcasterUserIds { get; init; } = [];
 
         public Task<EventSubSubscriptionRecord> CreateStreamSubscriptionAsync(string subscriptionType, string broadcasterUserId, string sessionId, CancellationToken cancellationToken)
         {
+            if (ThrowHttpBadRequestBroadcasterNotFoundForBroadcasterUserIds.Contains(broadcasterUserId))
+            {
+                throw NewHelixBroadcasterNotFoundHttpRequestException();
+            }
+
             if (FailCreateFor.Contains((subscriptionType, broadcasterUserId)))
             {
                 throw new InvalidOperationException($"boom-{subscriptionType}-{broadcasterUserId}");
@@ -569,6 +664,11 @@ public class EventSubSubscriptionSynchronizerTests
 
         public Task<EventSubSubscriptionRecord> CreateConduitSubscriptionAsync(string subscriptionType, string broadcasterUserId, string conduitId, CancellationToken cancellationToken)
         {
+            if (ThrowHttpBadRequestBroadcasterNotFoundForBroadcasterUserIds.Contains(broadcasterUserId))
+            {
+                throw NewHelixBroadcasterNotFoundHttpRequestException();
+            }
+
             if (FailCreateConduitFor.Contains((subscriptionType, broadcasterUserId)))
             {
                 throw new InvalidOperationException($"boom-{subscriptionType}-{broadcasterUserId}");
@@ -604,6 +704,14 @@ public class EventSubSubscriptionSynchronizerTests
 
         public Task<IReadOnlyList<TwitchChannelSearchResult>> SearchChannelsAsync(string query, CancellationToken cancellationToken)
             => throw new NotSupportedException();
+
+        private static HttpRequestException NewHelixBroadcasterNotFoundHttpRequestException()
+            => new(
+                """
+                Twitch Helix request failed while creating EventSub conduit subscription type=stream.online broadcaster_user_id=999999999 conduit_id=conduit-1. Status=400 (Bad Request). Response={"error":"Bad Request","status":400,"message":"cannot create a subscription for a user that does not exist"}
+                """,
+                inner: null,
+                statusCode: HttpStatusCode.BadRequest);
     }
 
     private sealed class TestDatabase(IServiceProvider services, string databasePath) : IAsyncDisposable

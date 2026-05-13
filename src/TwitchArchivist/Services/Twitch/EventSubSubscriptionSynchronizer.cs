@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
@@ -34,19 +35,24 @@ public class EventSubSubscriptionSynchronizer(
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
-                {
-                    channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, cancellationToken);
-                    channel.UpdatedUtc = DateTimeOffset.UtcNow;
-                }
+                var updatedUtc = DateTimeOffset.UtcNow;
+                await ResolveHelixBroadcasterUserIdAsync(channel, updatedUtc, cancellationToken);
 
-                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                if (string.IsNullOrWhiteSpace(channel.TwitchUserId) ||
+                    !TwitchHelixUserIds.IsHelixUserId(channel.TwitchUserId))
                 {
                     continue;
                 }
 
-                await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.online", sessionId, cancellationToken);
-                await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.offline", sessionId, cancellationToken);
+                if (!await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.online", sessionId, cancellationToken))
+                {
+                    continue;
+                }
+
+                if (!await EnsureSubscriptionAsync(dbContext, subscriptions, channel, "stream.offline", sessionId, cancellationToken))
+                {
+                    continue;
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -66,7 +72,7 @@ public class EventSubSubscriptionSynchronizer(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task EnsureSubscriptionAsync(
+    private async Task<bool> EnsureSubscriptionAsync(
         TwitchArchivistDbContext dbContext,
         IReadOnlyList<EventSubSubscriptionRecord> remoteSubscriptions,
         ChannelConfiguration channel,
@@ -92,11 +98,24 @@ public class EventSubSubscriptionSynchronizer(
 
         if (existing is null)
         {
-            existing = await twitchHelixClient.CreateStreamSubscriptionAsync(
-                subscriptionType,
-                channel.TwitchUserId!,
-                sessionId,
-                cancellationToken);
+            try
+            {
+                existing = await twitchHelixClient.CreateStreamSubscriptionAsync(
+                    subscriptionType,
+                    channel.TwitchUserId!,
+                    sessionId,
+                    cancellationToken);
+            }
+            catch (HttpRequestException ex) when (IsHelixBroadcasterNotFoundForEventSub(ex))
+            {
+                logger.LogWarning(
+                    ex,
+                    "Twitch rejected EventSub websocket subscription for channel {ChannelLogin} because the broadcaster user id is unknown to Helix; clearing stored id for a later resolve.",
+                    channel.TwitchLogin);
+                channel.TwitchUserId = null;
+                channel.UpdatedUtc = DateTimeOffset.UtcNow;
+                return false;
+            }
         }
 
         if (entity is null)
@@ -115,6 +134,7 @@ public class EventSubSubscriptionSynchronizer(
         entity.Status = existing.Status;
         entity.LastVerifiedUtc = DateTimeOffset.UtcNow;
         entity.UpdatedUtc = DateTimeOffset.UtcNow;
+        return true;
     }
 
     private async Task EnsureConduitSubscriptionsAsync(CancellationToken cancellationToken)
@@ -135,19 +155,23 @@ public class EventSubSubscriptionSynchronizer(
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
-                {
-                    channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, cancellationToken);
-                    channel.UpdatedUtc = now;
-                }
+                await ResolveHelixBroadcasterUserIdAsync(channel, now, cancellationToken);
 
-                if (string.IsNullOrWhiteSpace(channel.TwitchUserId))
+                if (string.IsNullOrWhiteSpace(channel.TwitchUserId) ||
+                    !TwitchHelixUserIds.IsHelixUserId(channel.TwitchUserId))
                 {
                     continue;
                 }
 
-                await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.online", cancellationToken);
-                await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.offline", cancellationToken);
+                if (!await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.online", cancellationToken))
+                {
+                    continue;
+                }
+
+                if (!await EnsureConduitSubscriptionAsync(dbContext, remoteSubscriptions, conduit, channel, "stream.offline", cancellationToken))
+                {
+                    continue;
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -185,7 +209,7 @@ public class EventSubSubscriptionSynchronizer(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task EnsureConduitSubscriptionAsync(
+    private async Task<bool> EnsureConduitSubscriptionAsync(
         TwitchArchivistDbContext dbContext,
         IReadOnlyList<EventSubSubscriptionRecord> remoteSubscriptions,
         EventSubConduit conduit,
@@ -211,11 +235,24 @@ public class EventSubSubscriptionSynchronizer(
 
         if (existing is null)
         {
-            existing = await twitchHelixClient.CreateConduitSubscriptionAsync(
-                subscriptionType,
-                channel.TwitchUserId!,
-                conduit.TwitchConduitId,
-                cancellationToken);
+            try
+            {
+                existing = await twitchHelixClient.CreateConduitSubscriptionAsync(
+                    subscriptionType,
+                    channel.TwitchUserId!,
+                    conduit.TwitchConduitId,
+                    cancellationToken);
+            }
+            catch (HttpRequestException ex) when (IsHelixBroadcasterNotFoundForEventSub(ex))
+            {
+                logger.LogWarning(
+                    ex,
+                    "Twitch rejected EventSub conduit subscription for channel {ChannelLogin} because the broadcaster user id is unknown to Helix; clearing stored id for a later resolve.",
+                    channel.TwitchLogin);
+                channel.TwitchUserId = null;
+                channel.UpdatedUtc = DateTimeOffset.UtcNow;
+                return false;
+            }
         }
 
         if (entity is null)
@@ -234,7 +271,27 @@ public class EventSubSubscriptionSynchronizer(
         entity.Status = existing.Status;
         entity.LastVerifiedUtc = DateTimeOffset.UtcNow;
         entity.UpdatedUtc = DateTimeOffset.UtcNow;
+        return true;
     }
+
+    private async Task ResolveHelixBroadcasterUserIdAsync(
+        ChannelConfiguration channel,
+        DateTimeOffset updatedUtc,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(channel.TwitchUserId) &&
+            TwitchHelixUserIds.IsHelixUserId(channel.TwitchUserId))
+        {
+            return;
+        }
+
+        channel.TwitchUserId = await twitchHelixClient.ResolveUserIdAsync(channel.TwitchLogin, cancellationToken);
+        channel.UpdatedUtc = updatedUtc;
+    }
+
+    private static bool IsHelixBroadcasterNotFoundForEventSub(HttpRequestException ex)
+        => ex.StatusCode == HttpStatusCode.BadRequest &&
+           ex.Message.Contains("user that does not exist", StringComparison.OrdinalIgnoreCase);
 
     private async Task<EventSubConduit?> ResolveCurrentConduitAsync(TwitchArchivistDbContext dbContext, CancellationToken cancellationToken)
     {
