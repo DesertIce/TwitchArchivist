@@ -150,7 +150,7 @@ function Invoke-DotNetPublish {
             New-Item -ItemType Directory -Path $PublishDirectory -Force | Out-Null
         }
 
-        & dotnet publish $ProjectPath -c $Configuration -o $PublishDirectory
+        & dotnet publish $ProjectPath -c $Configuration -o $PublishDirectory -r win-x64 --self-contained true
         if ($LASTEXITCODE -ne 0) {
             throw "dotnet publish failed with exit code $LASTEXITCODE."
         }

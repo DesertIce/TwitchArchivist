@@ -1,6 +1,6 @@
 # TwitchArchivist
 
-TwitchArchivist is an ASP.NET Core 8 application for Windows that watches Twitch channels through EventSub, tracks archive jobs in SQLite, and downloads completed VODs with `TwitchDownloaderCLI`.
+TwitchArchivist is an ASP.NET Core 10 application for Windows that watches Twitch channels through EventSub, tracks archive jobs in SQLite, and downloads completed VODs with `TwitchDownloaderCLI`.
 
 It is designed to run as a Windows Service in production and as a normal ASP.NET Core app during development. The built-in web UI is the local operator surface for channel mappings, diagnostics, logs, and recent archive jobs. When installed as a Windows Service with the stock scripts and config, the UI is at **`http://localhost:5000`** by default; local `dotnet run` uses different ports from `launchSettings.json` (see [Ports and listen URLs](#ports-and-listen-urls)).
 
@@ -17,7 +17,9 @@ It is designed to run as a Windows Service in production and as a normal ASP.NET
 ## Requirements
 
 - Windows
-- .NET 8 SDK
+- .NET 10 SDK
+
+Service installs from the repository scripts publish a **self-contained** `win-x64` build so the Windows Service does not depend on a separate ASP.NET Core runtime on the machine.
 - A Twitch developer application with a client ID and client secret
 - A local `TwitchDownloaderCLI` installation
 

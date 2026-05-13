@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-latest
 
     env:
-      DOTNET_VERSION: 8.0.x
+      DOTNET_VERSION: 10.0.x
       PROJECT_PATH: src/TwitchArchivist/TwitchArchivist.csproj
       PUBLISH_RUNTIME: win-x64
       PUBLISH_CONFIGURATION: Release
@@ -76,7 +76,7 @@ jobs:
           dotnet publish $env:PROJECT_PATH `
             --configuration $env:PUBLISH_CONFIGURATION `
             --runtime $env:PUBLISH_RUNTIME `
-            --self-contained false `
+            --self-contained true `
             --output $env:PUBLISH_DIRECTORY `
             -p:Version=${{ steps.version.outputs.release_version }} `
             -p:AssemblyVersion=${{ steps.version.outputs.assembly_version }} `
