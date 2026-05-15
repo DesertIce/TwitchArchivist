@@ -17,10 +17,18 @@ public class DiagnosticsPageIntegrationTests
         var payload = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Build context", payload);
+        Assert.Contains("data-build-context=\"true\"", payload);
+        Assert.Contains("TwitchArchivist", payload);
+        Assert.Contains(".NETCoreApp,Version=v10.0", payload);
         Assert.Contains("Save TwitchDownloaderCLI path", payload);
         Assert.Contains("Set up managed TwitchDownloaderCLI", payload);
         Assert.Contains("Save Twitch application credentials", payload);
         Assert.Contains("Twitch developer console", payload);
+        Assert.Contains("class=\"authorization-status-strip\"", payload);
+        Assert.Contains("class=\"authorization-layout\"", payload);
+        Assert.Contains("class=\"authorization-card\"", payload);
+        Assert.Contains("class=\"callback-grid\"", payload);
         Assert.Contains("data-copy-button=\"true\"", payload);
         Assert.Contains("data-copy-source=\"twitch-callback-current\"", payload);
         Assert.Contains("data-copy-source=\"twitch-callback-http-dev\"", payload);

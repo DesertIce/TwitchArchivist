@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Polly;
 using TwitchArchivist.Models;
 using TwitchArchivist.Persistence;
 using TwitchArchivist.Persistence.Entities;
@@ -296,15 +297,37 @@ public class TwitchAccessTokenProvider(
         return new PersistedUserToken(entity.AccessToken, entity.ExpiresUtc);
     }
 
-    private static async Task<TokenValidationResponse> ValidateUserTokenAsync(HttpClient client, string accessToken, CancellationToken cancellationToken)
+    private async Task<TokenValidationResponse> ValidateUserTokenAsync(HttpClient client, string accessToken, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "https://id.twitch.tv/oauth2/validate");
-        request.Headers.Authorization = new AuthenticationHeaderValue("OAuth", accessToken);
-
-        using var response = await client.SendAsync(request, cancellationToken);
+        using var response = await CreateTokenValidationRetryPolicy(cancellationToken).ExecuteAsync(
+            token =>
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, "https://id.twitch.tv/oauth2/validate");
+                request.Headers.Authorization = new AuthenticationHeaderValue("OAuth", accessToken);
+                return client.SendAsync(request, token);
+            },
+            cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<TokenValidationResponse>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Twitch did not return validation details for the user token.");
+    }
+
+    private AsyncPolicy<HttpResponseMessage> CreateTokenValidationRetryPolicy(CancellationToken cancellationToken)
+    {
+        return Policy<HttpResponseMessage>
+            .Handle<HttpRequestException>()
+            .Or<OperationCanceledException>(ex => !cancellationToken.IsCancellationRequested)
+            .WaitAndRetryAsync(
+                retryCount: 2,
+                sleepDurationProvider: retryAttempt => TimeSpan.FromMilliseconds(250 * retryAttempt),
+                onRetry: (outcome, delay, retryAttempt, _) =>
+                {
+                    logger.LogWarning(
+                        outcome.Exception,
+                        "Retrying Twitch user token validation after transient transport failure. Attempt {RetryAttempt}/2 in {RetryDelay}",
+                        retryAttempt,
+                        delay);
+                });
     }
 
     private static string GetValidityLabel(DateTimeOffset expiresUtc)

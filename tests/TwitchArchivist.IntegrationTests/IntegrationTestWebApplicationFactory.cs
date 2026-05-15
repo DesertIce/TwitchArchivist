@@ -1,6 +1,12 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using TwitchArchivist.Persistence;
+using TwitchArchivist.Services;
 
 namespace TwitchArchivist.IntegrationTests;
 
@@ -9,18 +15,21 @@ internal sealed class IntegrationTestWebApplicationFactory : WebApplicationFacto
     private readonly Action<IWebHostBuilder>? _configureBuilder;
     private readonly string _databasePath;
     private readonly IReadOnlyDictionary<string, string?> _configurationOverrides;
+    private readonly bool _enableHostedServices;
     private readonly bool _ownsDatabasePath;
 
     public IntegrationTestWebApplicationFactory(
         Action<IWebHostBuilder>? configureBuilder = null,
         string? databasePath = null,
-        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+        bool enableHostedServices = false)
     {
         _configureBuilder = configureBuilder;
         _databasePath = string.IsNullOrWhiteSpace(databasePath)
             ? Path.Combine(Path.GetTempPath(), "TwitchArchivist.IntegrationTests", $"{Guid.NewGuid():N}.db")
             : databasePath;
         _configurationOverrides = configurationOverrides ?? new Dictionary<string, string?>();
+        _enableHostedServices = enableHostedServices;
         _ownsDatabasePath = string.IsNullOrWhiteSpace(databasePath);
     }
 
@@ -36,7 +45,27 @@ internal sealed class IntegrationTestWebApplicationFactory : WebApplicationFacto
             configurationBuilder.AddInMemoryCollection(settings);
         });
 
+        if (!_enableHostedServices)
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IHostedService>();
+            });
+        }
+
         _configureBuilder?.Invoke(builder);
+    }
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+
+        using var scope = host.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        dbContext.Database.Migrate();
+        scope.ServiceProvider.GetRequiredService<RuntimeStatusStore>().MarkDatabaseReady();
+
+        return host;
     }
 
     protected override void Dispose(bool disposing)

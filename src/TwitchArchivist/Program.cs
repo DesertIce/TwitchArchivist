@@ -17,6 +17,7 @@ builder.Services.Configure<FileLoggingOptions>(builder.Configuration.GetSection(
 builder.Services.AddRouting(options => options.LowercaseUrls = true);
 builder.Services.AddRazorPages();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ApplicationContextProvider>();
 builder.Services.AddSingleton(new RecentLogStore(capacity: 500));
 builder.Services.AddSingleton<ILoggerProvider, RecentLogLoggerProvider>();
 builder.Services.AddSingleton<RollingFileLogStore>(serviceProvider =>
@@ -91,10 +92,11 @@ if (!app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseRouting();
 
-app.MapGet("/healthz", (RuntimeStatusStore runtimeStatusStore) => Results.Ok(new
+app.MapGet("/healthz", (RuntimeStatusStore runtimeStatusStore, ApplicationContextProvider applicationContextProvider) => Results.Ok(new
 {
     status = "healthy",
     service = "TwitchArchivist",
+    build = applicationContextProvider.Snapshot.Build,
     databaseReady = runtimeStatusStore.DatabaseReady,
     downloaderExecutableValid = runtimeStatusStore.DownloaderExecutableValid,
     eventSubConnectionState = runtimeStatusStore.EventSubConnectionState,
@@ -111,7 +113,11 @@ app.MapGet("/healthz", (RuntimeStatusStore runtimeStatusStore) => Results.Ok(new
     twitchUserAuthorizationExpiresUtc = runtimeStatusStore.TwitchUserAuthorizationExpiresUtc
 }));
 
-app.MapGet("/api/runtime-status", async (ITwitchAccessTokenProvider accessTokenProvider, RuntimeStatusStore runtimeStatusStore, CancellationToken cancellationToken) =>
+app.MapGet("/api/runtime-status", async (
+    ITwitchAccessTokenProvider accessTokenProvider,
+    RuntimeStatusStore runtimeStatusStore,
+    ApplicationContextProvider applicationContextProvider,
+    CancellationToken cancellationToken) =>
 {
     var authorizationState = await accessTokenProvider.ValidateUserAuthorizationAsync(cancellationToken);
     runtimeStatusStore.UpdateTwitchUserAuthorization(
@@ -125,6 +131,8 @@ app.MapGet("/api/runtime-status", async (ITwitchAccessTokenProvider accessTokenP
 
     return Results.Ok(new
     {
+        build = applicationContextProvider.Snapshot.Build,
+        runtimeContext = applicationContextProvider.Snapshot.RuntimeContext,
         databaseReady = runtimeStatusStore.DatabaseReady,
         downloaderExecutableValid = runtimeStatusStore.DownloaderExecutableValid,
         downloaderExecutablePath = runtimeStatusStore.DownloaderExecutablePath,

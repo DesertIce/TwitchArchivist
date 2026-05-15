@@ -1,7 +1,12 @@
 @page
 @model TwitchArchivist.Pages.Diagnostics.IndexModel
 @using TwitchArchivist.Pages
+@inject TwitchArchivist.Services.ApplicationContextProvider ApplicationContextProvider
 @{ ViewData["Title"] = "Diagnostics"; }
+
+@{
+    var applicationContext = ApplicationContextProvider.Snapshot;
+}
 
 <div asp-validation-summary="ModelOnly"></div>
 
@@ -19,6 +24,26 @@
 
         <dt>Downloader valid</dt>
         <dd><span class="badge @UiBadges.BoolBadgeClass(Model.RuntimeStatus.DownloaderExecutableValid)">@(Model.RuntimeStatus.DownloaderExecutableValid ? "Yes" : "No")</span></dd>
+    </dl>
+</section>
+
+<section class="panel">
+    <h2>Build context</h2>
+    <dl class="kv-card compact-kv" data-build-context="true">
+        <dt>Version</dt>
+        <dd><span class="mono">@applicationContext.Build.InformationalVersion</span></dd>
+
+        <dt>Assembly</dt>
+        <dd><span class="mono">@applicationContext.Build.AssemblyName</span></dd>
+
+        <dt>Target framework</dt>
+        <dd><span class="mono">@(applicationContext.Build.TargetFramework ?? "Unknown")</span></dd>
+
+        <dt>Environment</dt>
+        <dd><span class="mono">@applicationContext.RuntimeContext.EnvironmentName</span></dd>
+
+        <dt>Content root</dt>
+        <dd><span class="mono">@applicationContext.RuntimeContext.ContentRootPath</span></dd>
     </dl>
 </section>
 
@@ -98,106 +123,118 @@
 
 <section class="panel">
     <h2>Twitch authorization</h2>
-    <p class="muted">Create a Twitch application, save its client credentials here, then start user authorization from this page.</p>
-
-    <ol class="steps-list">
-        <li>Open the <a href="https://dev.twitch.tv/console" target="_blank" rel="noreferrer">Twitch developer console</a>.</li>
-        <li>Create an application with an OAuth redirect URL that matches this running server exactly.</li>
-        <li>Save the client id and client secret below, then run the Twitch authorization flow.</li>
-    </ol>
-
-    <div>
-        <label for="twitch-callback-current">Callback URL for this running app</label>
-        <div class="input-with-button">
-            <input id="twitch-callback-current"
-                   class="mono"
-                   type="text"
-                   value="@Model.TwitchOAuthCallbackUri"
-                   readonly
-                   data-copy-source="twitch-callback-current" />
-            <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-current">Copy</button>
+    <div class="authorization-status-strip">
+        <div>
+            <span class="status-label">Validity</span>
+            <span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.RuntimeStatus.TwitchUserAuthorizationValidity</span>
+        </div>
+        <div>
+            <span class="status-label">User</span>
+            <span class="mono" id="runtime-twitch-user">@(Model.RuntimeStatus.TwitchUserAuthorizationLogin ?? "Not authorized")</span>
+        </div>
+        <div>
+            <span class="status-label">Expires</span>
+            <span class="mono" id="runtime-twitch-expires">@(Model.RuntimeStatus.TwitchUserAuthorizationExpiresUtc?.ToString("u") ?? "Not authorized")</span>
         </div>
     </div>
-
-    @if (Model.ShowDevCallbackUrls)
-    {
-        <div class="form-grid">
-            <div>
-                <label for="twitch-callback-http-dev">Development HTTP callback</label>
-                <div class="input-with-button">
-                    <input id="twitch-callback-http-dev"
-                           class="mono"
-                           type="text"
-                           value="http://localhost:5222/auth/twitch/callback"
-                           readonly
-                           data-copy-source="twitch-callback-http-dev" />
-                    <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-http-dev">Copy</button>
-                </div>
-            </div>
-            <div>
-                <label for="twitch-callback-https-dev">Development HTTPS callback</label>
-                <div class="input-with-button">
-                    <input id="twitch-callback-https-dev"
-                           class="mono"
-                           type="text"
-                           value="https://localhost:7153/auth/twitch/callback"
-                           readonly
-                           data-copy-source="twitch-callback-https-dev" />
-                    <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-https-dev">Copy</button>
-                </div>
-            </div>
-        </div>
-    }
 
     @if (string.Equals(Model.SaveStatus, TwitchArchivist.Pages.Diagnostics.IndexModel.SaveStatusTwitchSaved, StringComparison.Ordinal))
     {
         <p class="field-hint success">Twitch application credentials saved.</p>
     }
 
-    <form method="post">
-        <div>
-            <label asp-for="Input.TwitchClientId"></label>
-            <input asp-for="Input.TwitchClientId" class="mono" autocomplete="off" />
-            <span asp-validation-for="Input.TwitchClientId"></span>
-        </div>
-        <div>
-            <label asp-for="Input.TwitchClientSecret"></label>
-            <div class="password-toggle">
-                <input asp-for="Input.TwitchClientSecret" class="mono" type="password" value="@Model.Input.TwitchClientSecret" autocomplete="off" spellcheck="false" />
-                <button type="button" class="button-ghost" data-password-toggle="true" data-password-target="Input_TwitchClientSecret">Show</button>
+    <div class="authorization-layout">
+        <div class="authorization-card">
+            <div class="authorization-card-header">
+                <h3 class="panel-subhead">Application setup</h3>
+                <a href="https://dev.twitch.tv/console" target="_blank" rel="noreferrer">Twitch developer console</a>
             </div>
-            <span asp-validation-for="Input.TwitchClientSecret"></span>
-            <p class="field-hint">Generating a new Twitch client secret invalidates the old one.</p>
+            <form method="post">
+                <div class="form-grid">
+                    <div>
+                        <label asp-for="Input.TwitchClientId"></label>
+                        <input asp-for="Input.TwitchClientId" class="mono" autocomplete="off" />
+                        <span asp-validation-for="Input.TwitchClientId"></span>
+                    </div>
+                    <div>
+                        <label asp-for="Input.TwitchClientSecret"></label>
+                        <div class="password-toggle">
+                            <input asp-for="Input.TwitchClientSecret" class="mono" type="password" value="@Model.Input.TwitchClientSecret" autocomplete="off" spellcheck="false" />
+                            <button type="button" class="button-ghost" data-password-toggle="true" data-password-target="Input_TwitchClientSecret">Show</button>
+                        </div>
+                        <span asp-validation-for="Input.TwitchClientSecret"></span>
+                        <p class="field-hint">Generating a new Twitch client secret invalidates the old one.</p>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button type="submit" asp-page-handler="SaveTwitchApp">Save Twitch application credentials</button>
+                </div>
+            </form>
         </div>
-        <div class="actions">
-            <button type="submit" asp-page-handler="SaveTwitchApp">Save Twitch application credentials</button>
+
+        <div class="authorization-card">
+            <h3 class="panel-subhead">Callback URLs</h3>
+            <div class="callback-grid">
+                <div>
+                    <label for="twitch-callback-current">Current app callback</label>
+                    <div class="input-with-button">
+                        <input id="twitch-callback-current"
+                               class="mono"
+                               type="text"
+                               value="@Model.TwitchOAuthCallbackUri"
+                               readonly
+                               data-copy-source="twitch-callback-current" />
+                        <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-current">Copy</button>
+                    </div>
+                </div>
+
+                @if (Model.ShowDevCallbackUrls)
+                {
+                    <div>
+                        <label for="twitch-callback-http-dev">Development HTTP callback</label>
+                        <div class="input-with-button">
+                            <input id="twitch-callback-http-dev"
+                                   class="mono"
+                                   type="text"
+                                   value="http://localhost:5222/auth/twitch/callback"
+                                   readonly
+                                   data-copy-source="twitch-callback-http-dev" />
+                            <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-http-dev">Copy</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="twitch-callback-https-dev">Development HTTPS callback</label>
+                        <div class="input-with-button">
+                            <input id="twitch-callback-https-dev"
+                                   class="mono"
+                                   type="text"
+                                   value="https://localhost:7153/auth/twitch/callback"
+                                   readonly
+                                   data-copy-source="twitch-callback-https-dev" />
+                            <button type="button" class="button-ghost" data-copy-button="true" data-copy-target="twitch-callback-https-dev">Copy</button>
+                        </div>
+                    </div>
+                }
+            </div>
         </div>
-    </form>
 
-    <h3 class="panel-subhead">User authorization status</h3>
-    <dl class="kv-card">
-        <dt>Status</dt>
-        <dd><span id="runtime-twitch-configured">@(Model.RuntimeStatus.TwitchUserAuthorizationConfigured ? "Configured" : "Missing")</span></dd>
+        <div class="authorization-card authorization-card-wide">
+            <div class="authorization-card-header">
+                <h3 class="panel-subhead">User token</h3>
+                <a class="button-link" href="/auth/twitch/start">Start or re-run Twitch authorization</a>
+            </div>
+            <dl class="kv-card compact-kv">
+                <dt>Status</dt>
+                <dd><span id="runtime-twitch-configured">@(Model.RuntimeStatus.TwitchUserAuthorizationConfigured ? "Configured" : "Missing")</span></dd>
 
-        <dt>Validity</dt>
-        <dd><span class="badge @Model.TwitchAuthorizationBadgeClass" id="runtime-twitch-validity">@Model.RuntimeStatus.TwitchUserAuthorizationValidity</span></dd>
+                <dt>Last validated</dt>
+                <dd><span class="mono" id="runtime-twitch-last-validated">@(Model.RuntimeStatus.TwitchUserAuthorizationLastValidatedUtc?.ToString("u") ?? "Not validated")</span></dd>
 
-        <dt>User</dt>
-        <dd><span class="mono" id="runtime-twitch-user">@(Model.RuntimeStatus.TwitchUserAuthorizationLogin ?? "Not authorized")</span></dd>
-
-        <dt>Expires</dt>
-        <dd><span class="mono" id="runtime-twitch-expires">@(Model.RuntimeStatus.TwitchUserAuthorizationExpiresUtc?.ToString("u") ?? "Not authorized")</span></dd>
-
-        <dt>Last validated</dt>
-        <dd><span class="mono" id="runtime-twitch-last-validated">@(Model.RuntimeStatus.TwitchUserAuthorizationLastValidatedUtc?.ToString("u") ?? "Not validated")</span></dd>
-
-        <dt>Detail</dt>
-        <dd id="runtime-twitch-detail">@(Model.RuntimeStatus.TwitchUserAuthorizationDetail ?? "No Twitch user token is stored.")</dd>
-    </dl>
-
-    <p class="actions">
-        <a class="button-link" href="/auth/twitch/start">Start or re-run Twitch authorization</a>
-    </p>
+                <dt>Detail</dt>
+                <dd id="runtime-twitch-detail">@(Model.RuntimeStatus.TwitchUserAuthorizationDetail ?? "No Twitch user token is stored.")</dd>
+            </dl>
+        </div>
+    </div>
 </section>
 
 <section class="panel">

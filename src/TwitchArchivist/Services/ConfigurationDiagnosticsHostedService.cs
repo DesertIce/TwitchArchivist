@@ -11,6 +11,8 @@ public class ConfigurationDiagnosticsHostedService(
     RuntimeStatusStore runtimeStatusStore,
     ILogger<ConfigurationDiagnosticsHostedService> logger) : BackgroundService
 {
+    internal static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(10);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -30,7 +32,7 @@ public class ConfigurationDiagnosticsHostedService(
                 authorizationState.LastValidatedUtc);
             logger.LogInformation("Configuration diagnostics refreshed");
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            await Task.Delay(RefreshInterval, stoppingToken);
         }
     }
 }

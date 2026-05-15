@@ -348,6 +348,68 @@ select {
     letter-spacing: 0;
 }
 
+.authorization-status-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin: 0.9rem 0 1rem;
+}
+
+.authorization-status-strip > div {
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--bg-row);
+    padding: 0.7rem 0.8rem;
+    min-width: 0;
+}
+
+.status-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+}
+
+.authorization-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.authorization-card {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    background: var(--bg-row);
+    padding: 0.9rem;
+}
+
+.authorization-card-wide {
+    grid-column: 1 / -1;
+}
+
+.authorization-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
+}
+
+.authorization-card-header .panel-subhead {
+    margin: 0;
+}
+
+.callback-grid {
+    display: grid;
+    gap: 0.85rem;
+}
+
 button, .button-link {
     background: var(--accent-strong);
     color: white;
@@ -774,6 +836,10 @@ details.expandable[open] > summary {
     word-break: break-word;
 }
 
+.kv-card.compact-kv {
+    grid-template-columns: minmax(120px, 0.32fr) minmax(0, 1fr);
+}
+
 .empty-state {
     text-align: center;
     padding: 1.75rem 1rem 2rem;
@@ -854,9 +920,14 @@ details.expandable[open] > summary {
     main { padding: 1.25rem 1rem 1.75rem; }
     .header-row { gap: 0.75rem; }
     .header-tools { margin-left: 0; width: 100%; }
+    .authorization-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
     header { padding: 0.85rem 1rem 0.95rem; }
     nav { width: 100%; }
+    .kv-card,
+    .kv-card.compact-kv { grid-template-columns: 1fr; }
+    .input-with-button,
+    .password-toggle { flex-direction: column; }
 }

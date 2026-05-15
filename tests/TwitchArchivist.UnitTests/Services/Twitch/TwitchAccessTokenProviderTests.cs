@@ -249,6 +249,80 @@ public class TwitchAccessTokenProviderTests
         Assert.NotNull(state.LastValidatedUtc);
     }
 
+    [Fact]
+    public async Task ValidateUserAuthorizationAsyncRetriesTransientValidationTransportFailure()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await SeedValidUserTokenAsync(database.Services);
+
+        var validationCalls = 0;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.ToString() == "https://id.twitch.tv/oauth2/validate")
+            {
+                validationCalls++;
+                if (validationCalls == 1)
+                {
+                    throw new HttpRequestException("TLS connection reset");
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "client_id": "client-id",
+                          "login": "immybisou",
+                          "user_id": "1011883719"
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                });
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var provider = CreateProvider(database.Services, handler);
+
+        var state = await provider.ValidateUserAuthorizationAsync(CancellationToken.None);
+
+        Assert.True(state.IsValid);
+        Assert.Equal("valid", state.Validity);
+        Assert.Equal(2, validationCalls);
+    }
+
+    [Fact]
+    public async Task ValidateUserAuthorizationAsyncDoesNotRetryTwitchTokenRejection()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await SeedValidUserTokenAsync(database.Services);
+
+        var validationCalls = 0;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.ToString() == "https://id.twitch.tv/oauth2/validate")
+            {
+                validationCalls++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent("""{"status":401,"message":"invalid access token"}""", Encoding.UTF8, "application/json")
+                });
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var provider = CreateProvider(database.Services, handler);
+
+        var state = await provider.ValidateUserAuthorizationAsync(CancellationToken.None);
+
+        Assert.False(state.IsValid);
+        Assert.Equal("invalid", state.Validity);
+        Assert.Equal(1, validationCalls);
+    }
+
     private static TwitchAccessTokenProvider CreateProvider(IServiceProvider services, HttpMessageHandler handler, int userRefreshBufferMinutes = 15)
     {
         var options = Options.Create(new TwitchOptions

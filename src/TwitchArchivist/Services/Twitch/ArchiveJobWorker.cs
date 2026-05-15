@@ -145,9 +145,24 @@ public class ArchiveJobWorker(
             job.ChannelConfiguration.TwitchLogin,
             vodId,
             outputPath);
-        var result = await twitchDownloaderRunner.DownloadVideoAsync(vodId, outputPath, cancellationToken);
+        var result = await TwitchDownloaderRetryPolicy.ExecuteAsync(
+            token => twitchDownloaderRunner.DownloadVideoAsync(vodId, outputPath, token),
+            Task.Delay,
+            (retryAttempt, retryDelay, failureDetail) =>
+            {
+                logger.LogWarning(
+                    "Archive job {ArchiveJobId} for channel {ChannelLogin} hit a retryable TwitchDownloader media playlist failure for VOD {VodId}. Retry {RetryAttempt} will run in {RetryDelay}. Failure: {FailureDetail}",
+                    job.Id,
+                    job.ChannelConfiguration.TwitchLogin,
+                    vodId,
+                    retryAttempt,
+                    retryDelay,
+                    failureDetail);
+            },
+            cancellationToken);
         job.Status = result.Succeeded ? ArchiveJobStatus.Succeeded : ArchiveJobStatus.Failed;
-        job.LastError = result.Succeeded ? null : string.Join(Environment.NewLine, [result.StandardError, result.StandardOutput]).Trim();
+        var failureDetail = string.Join(Environment.NewLine, [result.StandardError, result.StandardOutput]).Trim();
+        job.LastError = result.Succeeded ? null : TwitchDownloaderFailureClassifier.ToUserFacingMessage(vodId, failureDetail);
         job.CompletedUtc = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         if (result.Succeeded)

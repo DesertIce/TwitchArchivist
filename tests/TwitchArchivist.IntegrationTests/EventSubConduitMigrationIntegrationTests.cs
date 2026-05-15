@@ -28,7 +28,7 @@ public class EventSubConduitMigrationIntegrationTests
             });
 
         await InitializeDatabaseAsync(factory.Services);
-        await SeedChannelAsync(factory.Services, "alpha", "user-123");
+        await SeedChannelAsync(factory.Services, "alpha", "123");
 
         var synchronizer = factory.Services.GetRequiredService<IEventSubSubscriptionSynchronizer>();
         await synchronizer.EnsureSubscriptionsAsync("session-direct", CancellationToken.None);
@@ -99,7 +99,7 @@ public class EventSubConduitMigrationIntegrationTests
             await InitializeDatabaseAsync(firstFactory.Services);
             var coordinator = firstFactory.Services.GetRequiredService<IEventSubConduitCoordinator>();
             await coordinator.StartAsync(CancellationToken.None);
-            await SeedChannelAsync(firstFactory.Services, "alpha", "user-123");
+            await SeedChannelAsync(firstFactory.Services, "alpha", "123");
 
             var synchronizer = firstFactory.Services.GetRequiredService<IEventSubSubscriptionSynchronizer>();
             await synchronizer.EnsureSubscriptionsAsync(string.Empty, CancellationToken.None);
@@ -153,7 +153,7 @@ public class EventSubConduitMigrationIntegrationTests
         await InitializeDatabaseAsync(factory.Services);
         var coordinator = factory.Services.GetRequiredService<IEventSubConduitCoordinator>();
         await coordinator.StartAsync(CancellationToken.None);
-        await SeedChannelAsync(factory.Services, "alpha", "user-123");
+        await SeedChannelAsync(factory.Services, "alpha", "123");
 
         var synchronizer = factory.Services.GetRequiredService<IEventSubSubscriptionSynchronizer>();
         await synchronizer.EnsureSubscriptionsAsync(string.Empty, CancellationToken.None);

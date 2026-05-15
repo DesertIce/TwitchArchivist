@@ -1,13 +1,31 @@
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using System.Text.Json;
+using TwitchArchivist.Persistence;
 
 namespace TwitchArchivist.IntegrationTests;
 
 public class ScaffoldIntegrationTests
 {
+    [Fact]
+    public async Task DefaultFactoryDisablesHostedServicesAndMigratesDatabase()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory();
+
+        Assert.DoesNotContain(
+            factory.Services.GetServices<IHostedService>(),
+            hostedService => hostedService.GetType().Namespace?.StartsWith("TwitchArchivist", StringComparison.Ordinal) == true);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        Assert.True(await dbContext.Database.CanConnectAsync());
+        Assert.Empty(await dbContext.Database.GetPendingMigrationsAsync());
+    }
+
     [Fact]
     public async Task HealthEndpointReturnsHealthyStatus()
     {
@@ -15,10 +33,17 @@ public class ScaffoldIntegrationTests
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/healthz");
-        var payload = await response.Content.ReadAsStringAsync();
 
         Assert.True(response.IsSuccessStatusCode);
-        Assert.Contains("healthy", payload);
+
+        await using var payload = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(payload);
+        var root = document.RootElement;
+
+        Assert.Equal("healthy", root.GetProperty("status").GetString());
+        Assert.Equal("TwitchArchivist", root.GetProperty("service").GetString());
+        Assert.Equal("TwitchArchivist", root.GetProperty("build").GetProperty("assemblyName").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("build").GetProperty("informationalVersion").GetString()));
     }
 
     [Fact]
@@ -87,5 +112,31 @@ public class ScaffoldIntegrationTests
         Assert.True(response.IsSuccessStatusCode);
         Assert.Contains("twitchUserAuthorizationValidity", payload);
         Assert.Contains("twitchUserAuthorizationIsValid", payload);
+    }
+
+    [Fact]
+    public async Task RuntimeStatusEndpointReturnsBuildAndRuntimeContext()
+    {
+        await using var factory = new IntegrationTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/runtime-status");
+
+        Assert.True(response.IsSuccessStatusCode);
+
+        await using var payload = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(payload);
+        var root = document.RootElement;
+
+        var build = root.GetProperty("build");
+        Assert.Equal("TwitchArchivist", build.GetProperty("assemblyName").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(build.GetProperty("informationalVersion").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(build.GetProperty("targetFramework").GetString()));
+
+        var runtimeContext = root.GetProperty("runtimeContext");
+        Assert.False(string.IsNullOrWhiteSpace(runtimeContext.GetProperty("environmentName").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(runtimeContext.GetProperty("contentRootPath").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(runtimeContext.GetProperty("frameworkDescription").GetString()));
+        Assert.True(runtimeContext.GetProperty("processId").GetInt32() > 0);
     }
 }
