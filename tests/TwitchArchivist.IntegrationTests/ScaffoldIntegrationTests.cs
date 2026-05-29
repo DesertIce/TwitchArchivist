@@ -60,11 +60,21 @@ public class ScaffoldIntegrationTests
         Assert.Contains("Recent jobs", payload);
         Assert.Contains("/css/site.css", payload);
         Assert.Contains("/auth/twitch/start", payload);
+        Assert.Contains("href=\"https://desertice.link\"", payload);
+        Assert.Contains("href=\"https://desertice.link/archivist\"", payload);
+        Assert.Contains("class=\"header-links\"", payload);
+        Assert.True(
+            payload.IndexOf("<nav>", StringComparison.Ordinal) <
+            payload.IndexOf("<div class=\"header-links\"", StringComparison.Ordinal));
+        Assert.True(
+            payload.IndexOf("<div class=\"header-links\"", StringComparison.Ordinal) <
+            payload.IndexOf("<div class=\"header-tools\"", StringComparison.Ordinal));
 
         var cssResponse = await client.GetAsync("/css/site.css");
         var css = await cssResponse.Content.ReadAsStringAsync();
         Assert.True(cssResponse.IsSuccessStatusCode);
         Assert.Contains("color-scheme: dark", css);
+        Assert.Contains(".header-links", css);
     }
 
     [Fact]
