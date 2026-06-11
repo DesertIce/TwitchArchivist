@@ -7,6 +7,7 @@ namespace TwitchArchivist.Services.Twitch;
 public sealed class TwitchLiveStateSynchronizer(
     ITwitchHelixClient twitchHelixClient,
     IServiceScopeFactory scopeFactory,
+    IArchiveJobTriggerService archiveJobTriggerService,
     TimeProvider timeProvider,
     ILogger<TwitchLiveStateSynchronizer> logger) : ITwitchLiveStateSynchronizer
 {
@@ -79,6 +80,24 @@ public sealed class TwitchLiveStateSynchronizer(
                 state.LastOfflineUtc = now;
                 state.UpdatedUtc = now;
                 channel.UpdatedUtc = now;
+
+                try
+                {
+                    await archiveJobTriggerService.CreateArchiveJobFromOfflineAsync(
+                        channel.TwitchLogin,
+                        channel.TwitchUserId ?? string.Empty,
+                        "live-state-poll",
+                        now,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to create archive job from live-state polling for channel {ChannelLogin}", channel.TwitchLogin);
+                }
             }
         }
 

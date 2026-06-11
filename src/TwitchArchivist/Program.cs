@@ -52,6 +52,7 @@ builder.Services.AddSingleton<ICommandLineRunner, CommandLineRunner>();
 builder.Services.AddSingleton<ITwitchDownloaderBinaryVerifier, TwitchDownloaderBinaryVerifier>();
 builder.Services.AddSingleton<ITwitchAccessTokenProvider, TwitchAccessTokenProvider>();
 builder.Services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
+builder.Services.AddSingleton<IArchiveJobTriggerService, ArchiveJobTriggerService>();
 builder.Services.AddSingleton<ITwitchLiveStateSynchronizer, TwitchLiveStateSynchronizer>();
 builder.Services.AddSingleton<ITwitchDownloaderRunner, TwitchDownloaderRunner>();
 builder.Services.AddSingleton<IEventSubSubscriptionSynchronizer, EventSubSubscriptionSynchronizer>();

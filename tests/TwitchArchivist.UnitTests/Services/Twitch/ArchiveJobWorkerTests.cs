@@ -112,6 +112,40 @@ public class ArchiveJobWorkerTests
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_MarksActiveJobFailedWhenDownloaderThrows()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await SeedRunnableJobsAsync(database.Services, 1);
+
+        var archiveJobQueue = new ArchiveJobQueue();
+        var worker = new ArchiveJobWorker(
+            database.Services.GetRequiredService<IServiceScopeFactory>(),
+            archiveJobQueue,
+            new ThrowingTwitchHelixClient(),
+            new ThrowingDownloaderRunner(new InvalidOperationException("downloader crashed")),
+            Options.Create(new TwitchOptions()),
+            Options.Create(new DownloaderOptions()),
+            NullLogger<ArchiveJobWorker>.Instance);
+
+        await worker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var job = await WaitForSingleJobStatusAsync(
+                database.Services,
+                ArchiveJobStatus.Failed,
+                TimeSpan.FromSeconds(3));
+
+            Assert.Contains("downloader crashed", job.LastError, StringComparison.Ordinal);
+            Assert.NotNull(job.CompletedUtc);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static async Task SeedRunnableJobsAsync(IServiceProvider services, int count)
     {
         await using var scope = services.CreateAsyncScope();
@@ -159,6 +193,31 @@ public class ArchiveJobWorkerTests
         await dbContext.Database.EnsureCreatedAsync();
 
         return new TestDatabase(provider, connection);
+    }
+
+    private static async Task<ArchiveJob> WaitForSingleJobStatusAsync(
+        IServiceProvider services,
+        ArchiveJobStatus status,
+        TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await using var scope = services.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            var job = await dbContext.ArchiveJobs.SingleAsync();
+            if (job.Status == status)
+            {
+                return job;
+            }
+
+            await Task.Delay(50);
+        }
+
+        await using var verificationScope = services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var finalJob = await verificationDbContext.ArchiveJobs.SingleAsync();
+        throw new TimeoutException($"Timed out waiting for job status {status}. Last status was {finalJob.Status}.");
     }
 
     private sealed class BlockingDownloaderRunner(int concurrencyThreshold) : ITwitchDownloaderRunner
@@ -226,6 +285,14 @@ public class ArchiveJobWorkerTests
                 return false;
             }
         }
+    }
+
+    private sealed class ThrowingDownloaderRunner(Exception exception) : ITwitchDownloaderRunner
+    {
+        public Task<TwitchDownloaderResult> DownloadVideoAsync(
+            string vodId,
+            string outputPath,
+            CancellationToken cancellationToken) => throw exception;
     }
 
     private sealed class ThrowingTwitchHelixClient : ITwitchHelixClient

@@ -44,7 +44,43 @@ public class ArchiveJobWorker(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Archive job worker {WorkerId} failed to process archive job {ArchiveJobId}", workerId, archiveJobId);
+                await MarkJobFailedAfterUnhandledExceptionAsync(archiveJobId, ex, stoppingToken);
             }
+        }
+    }
+
+    private async Task MarkJobFailedAfterUnhandledExceptionAsync(
+        int archiveJobId,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            var job = await dbContext.ArchiveJobs.SingleOrDefaultAsync(x => x.Id == archiveJobId, cancellationToken);
+            if (job is null ||
+                job.Status is ArchiveJobStatus.Succeeded or ArchiveJobStatus.Failed or ArchiveJobStatus.Skipped)
+            {
+                return;
+            }
+
+            job.Status = ArchiveJobStatus.Failed;
+            job.LastError = $"Archive job processing failed unexpectedly: {exception.Message}";
+            job.StartedUtc ??= DateTimeOffset.UtcNow;
+            job.CompletedUtc = DateTimeOffset.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception failureUpdateException)
+        {
+            logger.LogError(
+                failureUpdateException,
+                "Archive job worker could not mark archive job {ArchiveJobId} failed after an unhandled processing error",
+                archiveJobId);
         }
     }
 

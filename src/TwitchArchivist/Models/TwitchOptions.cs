@@ -14,6 +14,8 @@ public class TwitchOptions
 
     public int AppAccessTokenRefreshPollingIntervalSeconds { get; set; } = 60;
 
+    public int LiveStateFallbackPollingIntervalSeconds { get; set; } = 900;
+
     public int EventSubMonitorIntervalSeconds { get; set; } = 15;
 
     public int EventSubSubscriptionSyncIntervalSeconds { get; set; } = 60;

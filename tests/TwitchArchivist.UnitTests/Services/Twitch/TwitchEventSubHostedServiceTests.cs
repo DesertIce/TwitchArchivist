@@ -361,16 +361,24 @@ public class TwitchEventSubHostedServiceTests
     }
 
     private static EventSubNotificationProcessor CreateNotificationProcessor(IServiceProvider services, IArchiveJobQueue archiveJobQueue)
-        => new(
+    {
+        var archiveJobTriggerService = new ArchiveJobTriggerService(
             services.GetRequiredService<IServiceScopeFactory>(),
             archiveJobQueue,
-            NullLogger<EventSubNotificationProcessor>.Instance,
+            NullLogger<ArchiveJobTriggerService>.Instance,
             Options.Create(new TwitchOptions
             {
                 EventSubRetryBaseDelaySeconds = 1,
                 EventSubRetryMaxDelaySeconds = 2
             }),
             TimeProvider.System);
+
+        return new EventSubNotificationProcessor(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            archiveJobTriggerService,
+            NullLogger<EventSubNotificationProcessor>.Instance,
+            TimeProvider.System);
+    }
 
     private static async Task<int> SeedChannelAsync(IServiceProvider services, string login, string twitchUserId)
     {

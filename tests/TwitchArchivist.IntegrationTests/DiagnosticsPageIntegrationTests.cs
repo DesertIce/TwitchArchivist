@@ -21,7 +21,9 @@ public class DiagnosticsPageIntegrationTests
         Assert.Contains("data-build-context=\"true\"", payload);
         Assert.Contains("TwitchArchivist", payload);
         Assert.Contains(".NETCoreApp,Version=v10.0", payload);
-        Assert.Contains("Save TwitchDownloaderCLI path", payload);
+        Assert.Contains("Save downloader configuration", payload);
+        Assert.Contains("Max concurrent downloads", payload);
+        Assert.Contains("id=\"Input_MaxConcurrentDownloads\"", payload);
         Assert.Contains("Set up managed TwitchDownloaderCLI", payload);
         Assert.Contains("Save Twitch application credentials", payload);
         Assert.Contains("Twitch developer console", payload);

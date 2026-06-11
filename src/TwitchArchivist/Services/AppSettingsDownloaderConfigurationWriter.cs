@@ -5,7 +5,10 @@ namespace TwitchArchivist.Services;
 
 public sealed class AppSettingsDownloaderConfigurationWriter(string appSettingsPath) : IDownloaderConfigurationWriter, ITwitchApplicationConfigurationWriter
 {
-    public async Task UpdateDownloaderExecutablePathAsync(string executablePath, CancellationToken cancellationToken)
+    public async Task UpdateDownloaderSettingsAsync(
+        string executablePath,
+        int maxConcurrentDownloads,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -13,6 +16,14 @@ public sealed class AppSettingsDownloaderConfigurationWriter(string appSettingsP
         if (string.IsNullOrWhiteSpace(normalizedPath))
         {
             throw new ArgumentException("An executable path is required.", nameof(executablePath));
+        }
+
+        if (maxConcurrentDownloads < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxConcurrentDownloads),
+                maxConcurrentDownloads,
+                "Max concurrent downloads must be at least 1.");
         }
 
         JsonObject rootObject;
@@ -28,6 +39,7 @@ public sealed class AppSettingsDownloaderConfigurationWriter(string appSettingsP
 
         var downloaderObject = rootObject["Downloader"] as JsonObject ?? [];
         downloaderObject["ExecutablePath"] = normalizedPath;
+        downloaderObject["MaxConcurrentDownloads"] = maxConcurrentDownloads;
         rootObject["Downloader"] = downloaderObject;
 
         var outputDirectory = Path.GetDirectoryName(appSettingsPath);

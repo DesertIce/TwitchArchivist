@@ -2,6 +2,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using TwitchArchivist.Models;
 using TwitchArchivist.Persistence;
 using TwitchArchivist.Persistence.Entities;
 using TwitchArchivist.Services.Twitch;
@@ -75,6 +77,7 @@ public class TwitchLiveStateSynchronizerTests
         var synchronizer = new TwitchLiveStateSynchronizer(
             helixClient,
             database.Services.GetRequiredService<IServiceScopeFactory>(),
+            new NoOpArchiveJobTriggerService(),
             new FixedTimeProvider(baseline),
             NullLogger<TwitchLiveStateSynchronizer>.Instance);
 
@@ -106,6 +109,70 @@ public class TwitchLiveStateSynchronizerTests
         Assert.Equal("disabled-stream", gamma.StreamSessionState!.LastKnownStreamId);
         Assert.Equal(baseline.AddHours(-5), gamma.StreamSessionState.LastOnlineUtc);
         Assert.Null(gamma.StreamSessionState.LastOfflineUtc);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsyncCreatesArchiveJobWhenPollingDetectsOfflineTransition()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var baseline = new DateTimeOffset(2026, 06, 11, 18, 0, 0, TimeSpan.Zero);
+        int channelId;
+
+        await using (var scope = database.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+            var channel = new ChannelConfiguration
+            {
+                TwitchLogin = "k3lsb3lls",
+                TwitchUserId = "1234",
+                OutputDirectory = @"D:\archive\k3lsb3lls",
+                IsEnabled = true,
+                CreatedUtc = baseline.AddDays(-1),
+                UpdatedUtc = baseline.AddDays(-1)
+            };
+            dbContext.ChannelConfigurations.Add(channel);
+            await dbContext.SaveChangesAsync();
+            channelId = channel.Id;
+
+            dbContext.StreamSessionStates.Add(new StreamSessionState
+            {
+                ChannelConfigurationId = channelId,
+                LastKnownStreamId = "stream-1",
+                LastOnlineUtc = baseline.AddHours(-2),
+                CreatedUtc = baseline.AddDays(-1),
+                UpdatedUtc = baseline.AddHours(-2)
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var archiveJobQueue = new RecordingArchiveJobQueue();
+        var archiveJobTriggerService = new ArchiveJobTriggerService(
+            database.Services.GetRequiredService<IServiceScopeFactory>(),
+            archiveJobQueue,
+            NullLogger<ArchiveJobTriggerService>.Instance,
+            Options.Create(new TwitchOptions
+            {
+                EventSubRetryBaseDelaySeconds = 1,
+                EventSubRetryMaxDelaySeconds = 2
+            }),
+            new FixedTimeProvider(baseline));
+        var synchronizer = new TwitchLiveStateSynchronizer(
+            new StubTwitchHelixClient([]),
+            database.Services.GetRequiredService<IServiceScopeFactory>(),
+            archiveJobTriggerService,
+            new FixedTimeProvider(baseline),
+            NullLogger<TwitchLiveStateSynchronizer>.Instance);
+
+        await synchronizer.SynchronizeAsync(CancellationToken.None);
+
+        await using var verificationScope = database.Services.CreateAsyncScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+        var job = await verificationDbContext.ArchiveJobs.SingleAsync();
+
+        Assert.Equal(channelId, job.ChannelConfigurationId);
+        Assert.Equal("live-state-poll", job.TriggerSource);
+        Assert.Equal(ArchiveJobStatus.Pending, job.Status);
+        Assert.Equal([job.Id], archiveJobQueue.EnqueuedIds);
     }
 
     private static async Task<TestDatabase> CreateDatabaseAsync()
@@ -153,6 +220,33 @@ public class TwitchLiveStateSynchronizerTests
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
+    private sealed class NoOpArchiveJobTriggerService : IArchiveJobTriggerService
+    {
+        public Task CreateArchiveJobFromOfflineAsync(
+            string channelLogin,
+            string broadcasterUserId,
+            string triggerSource,
+            DateTimeOffset offlineDetectedUtc,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingArchiveJobQueue : IArchiveJobQueue
+    {
+        public List<int> EnqueuedIds { get; } = [];
+
+        public ValueTask EnqueueAsync(int archiveJobId, CancellationToken cancellationToken)
+        {
+            EnqueuedIds.Add(archiveJobId);
+            return ValueTask.CompletedTask;
+        }
+
+        public async IAsyncEnumerable<int> ReadAllAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
     }
 
     private sealed class TestDatabase(IServiceProvider services, SqliteConnection connection) : IAsyncDisposable

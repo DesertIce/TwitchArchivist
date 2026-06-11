@@ -103,19 +103,27 @@
     }
 
     <form method="post">
-        <div>
-            <label asp-for="Input.DownloaderExecutablePath"></label>
-            <div class="input-with-button">
-                <input asp-for="Input.DownloaderExecutablePath" class="mono" data-file-picker="true" />
-                <button type="button" class="button-ghost" data-file-picker-button="true">Browse</button>
+        <div class="form-grid">
+            <div>
+                <label asp-for="Input.DownloaderExecutablePath"></label>
+                <div class="input-with-button">
+                    <input asp-for="Input.DownloaderExecutablePath" class="mono" data-file-picker="true" />
+                    <button type="button" class="button-ghost" data-file-picker-button="true">Browse</button>
+                </div>
+                <p class="field-hint" data-file-picker-status="true" hidden></p>
+                <span asp-validation-for="Input.DownloaderExecutablePath"></span>
+                <p class="field-hint">Select the server-visible `TwitchDownloaderCLI.exe` file.</p>
             </div>
-            <p class="field-hint" data-file-picker-status="true" hidden></p>
-            <span asp-validation-for="Input.DownloaderExecutablePath"></span>
-            <p class="field-hint">Select the server-visible `TwitchDownloaderCLI.exe` file.</p>
+            <div>
+                <label asp-for="Input.MaxConcurrentDownloads"></label>
+                <input asp-for="Input.MaxConcurrentDownloads" type="number" min="1" step="1" inputmode="numeric" />
+                <span asp-validation-for="Input.MaxConcurrentDownloads"></span>
+                <p class="field-hint">How many archive jobs may download at the same time.</p>
+            </div>
         </div>
         <div class="actions">
             <button type="submit" asp-page-handler="InstallDownloader" class="button-ghost">Set up managed TwitchDownloaderCLI</button>
-            <button type="submit" asp-page-handler="SaveDownloader">Save TwitchDownloaderCLI path</button>
+            <button type="submit" asp-page-handler="SaveDownloader">Save downloader configuration</button>
         </div>
     </form>
     <p class="field-hint">The managed setup downloads the latest Windows x64 TwitchDownloaderCLI release into <span class="mono">tools\TwitchDownloaderCLI\current</span> under this app directory and updates the configured executable path automatically.</p>

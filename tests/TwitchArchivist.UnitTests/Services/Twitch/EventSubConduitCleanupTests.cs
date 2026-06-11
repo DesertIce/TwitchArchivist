@@ -108,16 +108,24 @@ public class EventSubConduitCleanupTests
     }
 
     private static EventSubNotificationProcessor CreateNotificationProcessor(IServiceProvider services)
-        => new(
+    {
+        var archiveJobTriggerService = new ArchiveJobTriggerService(
             services.GetRequiredService<IServiceScopeFactory>(),
             new NoOpArchiveJobQueue(),
-            NullLogger<EventSubNotificationProcessor>.Instance,
+            NullLogger<ArchiveJobTriggerService>.Instance,
             Options.Create(new TwitchOptions
             {
                 EventSubRetryBaseDelaySeconds = 1,
                 EventSubRetryMaxDelaySeconds = 2
             }),
             TimeProvider.System);
+
+        return new EventSubNotificationProcessor(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            archiveJobTriggerService,
+            NullLogger<EventSubNotificationProcessor>.Instance,
+            TimeProvider.System);
+    }
 
     private static EventSubConduitCleanupService CreateCleanupService(
         IServiceProvider services,

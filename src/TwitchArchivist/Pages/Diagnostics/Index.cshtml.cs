@@ -47,6 +47,7 @@ public class IndexModel(
         Input = new InputModel
         {
             DownloaderExecutablePath = downloaderOptions.CurrentValue.ExecutablePath ?? runtimeStatusStore.DownloaderExecutablePath ?? string.Empty,
+            MaxConcurrentDownloads = Math.Max(1, downloaderOptions.CurrentValue.MaxConcurrentDownloads),
             TwitchClientId = twitchOptions.CurrentValue.ClientId ?? string.Empty,
             TwitchClientSecret = twitchOptions.CurrentValue.ClientSecret ?? string.Empty
         };
@@ -61,7 +62,16 @@ public class IndexModel(
             return Page();
         }
 
-        await downloaderConfigurationWriter.UpdateDownloaderExecutablePathAsync(normalizedPath, cancellationToken);
+        if (Input.MaxConcurrentDownloads < 1)
+        {
+            ModelState.AddModelError($"{nameof(Input)}.{nameof(Input.MaxConcurrentDownloads)}", "Max concurrent downloads must be at least 1.");
+            return Page();
+        }
+
+        await downloaderConfigurationWriter.UpdateDownloaderSettingsAsync(
+            normalizedPath,
+            Input.MaxConcurrentDownloads,
+            cancellationToken);
 
         var resolvedPath = DownloaderExecutablePathResolver.Resolve(normalizedPath);
         var verification = await twitchDownloaderBinaryVerifier.VerifyAsync(resolvedPath, cancellationToken);
@@ -116,6 +126,10 @@ public class IndexModel(
         [Required]
         [StringLength(1024)]
         public string DownloaderExecutablePath { get; set; } = string.Empty;
+
+        [Display(Name = "Max concurrent downloads")]
+        [Range(1, int.MaxValue, ErrorMessage = "Max concurrent downloads must be at least 1.")]
+        public int MaxConcurrentDownloads { get; set; } = 2;
 
         [Display(Name = "Twitch client id")]
         [StringLength(256)]

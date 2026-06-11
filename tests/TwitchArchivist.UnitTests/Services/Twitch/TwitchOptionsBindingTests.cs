@@ -15,7 +15,8 @@ public class TwitchOptionsBindingTests
                 [$"{TwitchOptions.SectionName}:EventSubConduitShardCount"] = "8",
                 [$"{TwitchOptions.SectionName}:EventSubConduitId"] = "conduit-123",
                 [$"{TwitchOptions.SectionName}:EventSubConduitAssignmentTimeoutSeconds"] = "10",
-                [$"{TwitchOptions.SectionName}:EventSubConduitReconcileIntervalSeconds"] = "45"
+                [$"{TwitchOptions.SectionName}:EventSubConduitReconcileIntervalSeconds"] = "45",
+                [$"{TwitchOptions.SectionName}:LiveStateFallbackPollingIntervalSeconds"] = "1200"
             })
             .Build();
 
@@ -27,5 +28,6 @@ public class TwitchOptionsBindingTests
         Assert.Equal("conduit-123", options.EventSubConduitId);
         Assert.Equal(10, options.EventSubConduitAssignmentTimeoutSeconds);
         Assert.Equal(45, options.EventSubConduitReconcileIntervalSeconds);
+        Assert.Equal(1200, options.LiveStateFallbackPollingIntervalSeconds);
     }
 }

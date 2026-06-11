@@ -2,6 +2,8 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using TwitchArchivist.Models;
 using TwitchArchivist.Services;
 
 namespace TwitchArchivist.Services.Twitch;
@@ -9,7 +11,8 @@ namespace TwitchArchivist.Services.Twitch;
 public sealed class ManagedTwitchDownloaderInstaller(
     HttpClient httpClient,
     IHostEnvironment hostEnvironment,
-    IDownloaderConfigurationWriter downloaderConfigurationWriter) : IManagedTwitchDownloaderInstaller
+    IDownloaderConfigurationWriter downloaderConfigurationWriter,
+    IOptionsMonitor<DownloaderOptions> downloaderOptions) : IManagedTwitchDownloaderInstaller
 {
     private const string LatestReleaseUrl = "https://api.github.com/repos/lay295/TwitchDownloader/releases/latest";
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -36,7 +39,7 @@ public sealed class ManagedTwitchDownloaderInstaller(
 
         if (await IsCurrentInstallReusableAsync(manifestPath, executablePath, release.TagName, cancellationToken))
         {
-            await downloaderConfigurationWriter.UpdateDownloaderExecutablePathAsync(executablePath, cancellationToken);
+            await SaveDownloaderExecutablePathAsync(executablePath, cancellationToken);
             return new ManagedTwitchDownloaderInstallResult(executablePath, release.TagName, true);
         }
 
@@ -74,7 +77,7 @@ public sealed class ManagedTwitchDownloaderInstaller(
                 WriteIndented = true
             });
             await File.WriteAllTextAsync(manifestPath, manifestJson, cancellationToken);
-            await downloaderConfigurationWriter.UpdateDownloaderExecutablePathAsync(executablePath, cancellationToken);
+            await SaveDownloaderExecutablePathAsync(executablePath, cancellationToken);
 
             return new ManagedTwitchDownloaderInstallResult(executablePath, release.TagName, false);
         }
@@ -90,6 +93,15 @@ public sealed class ManagedTwitchDownloaderInstaller(
                 Directory.Delete(stagingDirectory, recursive: true);
             }
         }
+    }
+
+    private Task SaveDownloaderExecutablePathAsync(string executablePath, CancellationToken cancellationToken)
+    {
+        var maxConcurrentDownloads = Math.Max(1, downloaderOptions.CurrentValue.MaxConcurrentDownloads);
+        return downloaderConfigurationWriter.UpdateDownloaderSettingsAsync(
+            executablePath,
+            maxConcurrentDownloads,
+            cancellationToken);
     }
 
     private async Task<TwitchDownloaderRelease> GetLatestReleaseAsync(CancellationToken cancellationToken)

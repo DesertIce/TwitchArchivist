@@ -46,11 +46,14 @@ Key sections:
   },
   "Downloader": {
     "ExecutablePath": "",
-    "MaxConcurrentDownloads": 2
+    "MaxConcurrentDownloads": 2,
+    "DownloadInactivityTimeoutSeconds": 600,
+    "DownloadWatchIntervalSeconds": 15
   },
   "Twitch": {
     "ClientId": "your-client-id",
     "ClientSecret": "your-client-secret",
+    "LiveStateFallbackPollingIntervalSeconds": 900,
     "EventSubTransportMode": "conduit-websocket"
   },
   "FileLogging": {
@@ -66,6 +69,9 @@ Notes:
 - `Storage:DatabasePath` is relative to the app content root unless you provide an absolute path.
 - `Downloader:ExecutablePath` can be left blank to use the fallback path `%APPDATA%\TwitchDownloaderCLI\TwitchDownloaderCLI.exe`.
 - `Downloader:MaxConcurrentDownloads` controls how many archive jobs may download concurrently. It defaults to `2`; values below `1` are treated as `1`.
+- `Downloader:DownloadInactivityTimeoutSeconds` controls how long an individual `TwitchDownloaderCLI` process may go without stdout, stderr, or output file progress before the app terminates it and marks the archive job failed. It defaults to `600`.
+- `Downloader:DownloadWatchIntervalSeconds` controls how often each active downloader process is checked for progress. It defaults to `15`.
+- `Twitch:LiveStateFallbackPollingIntervalSeconds` controls the low-frequency Helix live-state fallback poll used to recover from missed EventSub notifications. It defaults to `900` (15 minutes).
 - The checked-in example files currently opt into `conduit-websocket`.
 - The options class default is still `websocket` if `EventSubTransportMode` is omitted entirely.
 
@@ -105,7 +111,7 @@ The resulting Twitch user token is stored in the SQLite-backed application state
 
 ## TwitchDownloaderCLI
 
-The diagnostics page now supports one-click managed setup for `TwitchDownloaderCLI`. It downloads the latest Windows x64 CLI release from the upstream [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader) GitHub releases page, extracts it into the app directory, and saves the resolved executable path into `appsettings.json`.
+The diagnostics page now supports one-click managed setup for `TwitchDownloaderCLI`. It downloads the latest Windows x64 CLI release from the upstream [`lay295/TwitchDownloader`](https://github.com/lay295/TwitchDownloader) GitHub releases page, extracts it into the app directory, and saves the resolved executable path into `appsettings.json`. The same page also saves `Downloader:MaxConcurrentDownloads`.
 
 Managed install location:
 
@@ -140,8 +146,10 @@ Typical explicit configuration:
 The app launches the downloader like this:
 
 ```text
-TwitchDownloaderCLI.exe videodownload --id <vodId> -o <outputPath>
+TwitchDownloaderCLI.exe videodownload --id <vodId> -o <outputPath> --collision Overwrite
 ```
+
+The explicit collision mode lets retries and restart recovery replace an existing partial output file instead of waiting at TwitchDownloaderCLI's interactive overwrite prompt.
 
 Manual verification:
 
@@ -258,13 +266,15 @@ Operational notes:
 
 ## Archive job flow
 
-When a tracked channel goes offline:
+When EventSub reports that a tracked channel went offline:
 
 1. TwitchArchivist queues an archive job.
 2. The worker waits for Twitch to expose the finished archive VOD.
 3. It retries VOD discovery using the configured delay and retry count.
-4. It downloads the matching VOD with `TwitchDownloaderCLI`; up to `Downloader:MaxConcurrentDownloads` archive jobs can be in this stage concurrently.
+4. It downloads the matching VOD with `TwitchDownloaderCLI`; up to `Downloader:MaxConcurrentDownloads` archive jobs can be in this stage concurrently. Each active downloader process is watched independently and is terminated if it stops reporting output or output-file progress for `Downloader:DownloadInactivityTimeoutSeconds`.
 5. If enabled for that channel, it prunes older successful files after the new archive succeeds.
+
+As a fallback, the app also polls Helix live state at `Twitch:LiveStateFallbackPollingIntervalSeconds`. That poll is intentionally infrequent and only creates an archive job when it observes an enabled channel transition from previously online to now offline.
 
 Relevant `Twitch` settings:
 

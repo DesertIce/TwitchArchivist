@@ -17,6 +17,12 @@ public class IndexModelTests
     {
         var runtimeStatusStore = new RuntimeStatusStore();
         var writer = new FakeDownloaderConfigurationWriter();
+        var input = new IndexModel.InputModel
+        {
+            DownloaderExecutablePath = @"D:\Tools\TwitchDownloaderCLI.exe",
+            MaxConcurrentDownloads = 4
+        };
+
         var model = new IndexModel(
             runtimeStatusStore,
             writer,
@@ -27,10 +33,7 @@ public class IndexModelTests
             new FakeTwitchDownloaderBinaryVerifier(),
             new FakeHostEnvironment())
         {
-            Input = new IndexModel.InputModel
-            {
-                DownloaderExecutablePath = @"D:\Tools\TwitchDownloaderCLI.exe"
-            }
+            Input = input
         };
 
         var result = await model.OnPostSaveDownloaderAsync(CancellationToken.None);
@@ -38,6 +41,7 @@ public class IndexModelTests
         var redirect = Assert.IsType<RedirectToPageResult>(result);
         Assert.Equal("/Diagnostics/Index", redirect.PageName);
         Assert.Equal(@"D:\Tools\TwitchDownloaderCLI.exe", writer.SavedPath);
+        Assert.Equal(4, writer.SavedMaxConcurrentDownloads);
         Assert.Equal("saved", model.SaveStatus);
     }
 
@@ -67,6 +71,60 @@ public class IndexModelTests
         Assert.IsType<PageResult>(result);
         Assert.False(model.ModelState.IsValid);
         Assert.Null(writer.SavedPath);
+    }
+
+    [Fact]
+    public async Task OnPostSaveDownloaderAsync_RejectsDownloadConcurrencyBelowOne()
+    {
+        var runtimeStatusStore = new RuntimeStatusStore();
+        var writer = new FakeDownloaderConfigurationWriter();
+        var input = new IndexModel.InputModel
+        {
+            DownloaderExecutablePath = @"D:\Tools\TwitchDownloaderCLI.exe",
+            MaxConcurrentDownloads = 0
+        };
+
+        var model = new IndexModel(
+            runtimeStatusStore,
+            writer,
+            writer,
+            new FakeManagedTwitchDownloaderInstaller(),
+            new FakeOptionsMonitor(new DownloaderOptions()),
+            new FakeTwitchOptionsMonitor(new TwitchOptions()),
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment())
+        {
+            Input = input
+        };
+
+        var result = await model.OnPostSaveDownloaderAsync(CancellationToken.None);
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.ModelState.IsValid);
+        Assert.Null(writer.SavedPath);
+        Assert.Null(writer.SavedMaxConcurrentDownloads);
+    }
+
+    [Fact]
+    public void OnGet_LoadsConfiguredDownloadConcurrency()
+    {
+        var model = new IndexModel(
+            new RuntimeStatusStore(),
+            new FakeDownloaderConfigurationWriter(),
+            new FakeDownloaderConfigurationWriter(),
+            new FakeManagedTwitchDownloaderInstaller(),
+            new FakeOptionsMonitor(new DownloaderOptions
+            {
+                ExecutablePath = @"D:\Tools\TwitchDownloaderCLI.exe",
+                MaxConcurrentDownloads = 6
+            }),
+            new FakeTwitchOptionsMonitor(new TwitchOptions()),
+            new FakeTwitchDownloaderBinaryVerifier(),
+            new FakeHostEnvironment());
+
+        model.OnGet();
+
+        Assert.Equal(6, model.Input.MaxConcurrentDownloads);
     }
 
     [Fact]
@@ -195,12 +253,17 @@ public class IndexModelTests
     private sealed class FakeDownloaderConfigurationWriter : IDownloaderConfigurationWriter, ITwitchApplicationConfigurationWriter
     {
         public string? SavedPath { get; private set; }
+        public int? SavedMaxConcurrentDownloads { get; private set; }
         public string? SavedClientId { get; private set; }
         public string? SavedClientSecret { get; private set; }
 
-        public Task UpdateDownloaderExecutablePathAsync(string executablePath, CancellationToken cancellationToken)
+        public Task UpdateDownloaderSettingsAsync(
+            string executablePath,
+            int maxConcurrentDownloads,
+            CancellationToken cancellationToken)
         {
             SavedPath = executablePath;
+            SavedMaxConcurrentDownloads = maxConcurrentDownloads;
             return Task.CompletedTask;
         }
 

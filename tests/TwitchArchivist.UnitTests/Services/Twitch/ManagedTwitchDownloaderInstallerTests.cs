@@ -4,6 +4,8 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using TwitchArchivist.Models;
 using TwitchArchivist.Services;
 using TwitchArchivist.Services.Twitch;
 
@@ -51,13 +53,15 @@ public class ManagedTwitchDownloaderInstallerTests
             var installer = new ManagedTwitchDownloaderInstaller(
                 httpClient,
                 new FakeHostEnvironment(contentRoot.FullName),
-                writer);
+                writer,
+                new FakeOptionsMonitor(new DownloaderOptions { MaxConcurrentDownloads = 5 }));
 
             var result = await installer.InstallOrUpdateAsync(CancellationToken.None);
 
             Assert.Equal("1.56.4", result.Version);
             Assert.False(result.AlreadyInstalled);
             Assert.NotNull(writer.SavedPath);
+            Assert.Equal(5, writer.SavedMaxConcurrentDownloads);
             Assert.EndsWith(@"tools\TwitchDownloaderCLI\current\TwitchDownloaderCLI.exe", writer.SavedPath, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(writer.SavedPath));
             var manifestPath = Path.Combine(contentRoot.FullName, "tools", "TwitchDownloaderCLI", "managed-install.json");
@@ -116,13 +120,15 @@ public class ManagedTwitchDownloaderInstallerTests
             var installer = new ManagedTwitchDownloaderInstaller(
                 httpClient,
                 new FakeHostEnvironment(contentRoot.FullName),
-                writer);
+                writer,
+                new FakeOptionsMonitor(new DownloaderOptions { MaxConcurrentDownloads = 6 }));
 
             var result = await installer.InstallOrUpdateAsync(CancellationToken.None);
 
             Assert.Equal(1, releaseCalls);
             Assert.True(result.AlreadyInstalled);
             Assert.Equal(executablePath, writer.SavedPath);
+            Assert.Equal(6, writer.SavedMaxConcurrentDownloads);
         }
         finally
         {
@@ -158,12 +164,26 @@ public class ManagedTwitchDownloaderInstallerTests
     private sealed class FakeDownloaderConfigurationWriter : IDownloaderConfigurationWriter
     {
         public string? SavedPath { get; private set; }
+        public int? SavedMaxConcurrentDownloads { get; private set; }
 
-        public Task UpdateDownloaderExecutablePathAsync(string executablePath, CancellationToken cancellationToken)
+        public Task UpdateDownloaderSettingsAsync(
+            string executablePath,
+            int maxConcurrentDownloads,
+            CancellationToken cancellationToken)
         {
             SavedPath = executablePath;
+            SavedMaxConcurrentDownloads = maxConcurrentDownloads;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeOptionsMonitor(DownloaderOptions currentValue) : IOptionsMonitor<DownloaderOptions>
+    {
+        public DownloaderOptions CurrentValue => currentValue;
+
+        public DownloaderOptions Get(string? name) => currentValue;
+
+        public IDisposable? OnChange(Action<DownloaderOptions, string?> listener) => null;
     }
 
     private sealed class FakeHostEnvironment(string contentRootPath) : IHostEnvironment
