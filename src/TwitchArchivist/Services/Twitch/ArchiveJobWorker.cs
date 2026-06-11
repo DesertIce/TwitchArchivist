@@ -12,21 +12,38 @@ public class ArchiveJobWorker(
     ITwitchHelixClient twitchHelixClient,
     ITwitchDownloaderRunner twitchDownloaderRunner,
     IOptions<TwitchOptions> twitchOptions,
+    IOptions<DownloaderOptions> downloaderOptions,
     ILogger<ArchiveJobWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await QueueRecoverableJobsAsync(stoppingToken);
 
+        var downloadConcurrency = Math.Max(1, downloaderOptions.Value.MaxConcurrentDownloads);
+        logger.LogInformation("Archive job worker is starting with download concurrency {DownloadConcurrency}", downloadConcurrency);
+
+        var workers = Enumerable.Range(1, downloadConcurrency)
+            .Select(workerId => ProcessQueueAsync(workerId, stoppingToken))
+            .ToArray();
+
+        await Task.WhenAll(workers);
+    }
+
+    private async Task ProcessQueueAsync(int workerId, CancellationToken stoppingToken)
+    {
         await foreach (var archiveJobId in archiveJobQueue.ReadAllAsync(stoppingToken))
         {
             try
             {
                 await ProcessJobAsync(archiveJobId, stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to process archive job {ArchiveJobId}", archiveJobId);
+                logger.LogError(ex, "Archive job worker {WorkerId} failed to process archive job {ArchiveJobId}", workerId, archiveJobId);
             }
         }
     }

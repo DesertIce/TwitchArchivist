@@ -45,7 +45,8 @@ Key sections:
     "DatabasePath": "data/twitcharchivist.db"
   },
   "Downloader": {
-    "ExecutablePath": ""
+    "ExecutablePath": "",
+    "MaxConcurrentDownloads": 2
   },
   "Twitch": {
     "ClientId": "your-client-id",
@@ -64,6 +65,7 @@ Notes:
 
 - `Storage:DatabasePath` is relative to the app content root unless you provide an absolute path.
 - `Downloader:ExecutablePath` can be left blank to use the fallback path `%APPDATA%\TwitchDownloaderCLI\TwitchDownloaderCLI.exe`.
+- `Downloader:MaxConcurrentDownloads` controls how many archive jobs may download concurrently. It defaults to `2`; values below `1` are treated as `1`.
 - The checked-in example files currently opt into `conduit-websocket`.
 - The options class default is still `websocket` if `EventSubTransportMode` is omitted entirely.
 
@@ -118,6 +120,7 @@ If you prefer to manage the binary yourself, the app still supports a manual pat
 Expected setting:
 
 - `Downloader:ExecutablePath`
+- `Downloader:MaxConcurrentDownloads`
 
 Fallback when blank:
 
@@ -128,7 +131,8 @@ Typical explicit configuration:
 ```json
 {
   "Downloader": {
-    "ExecutablePath": "C:\\Tools\\TwitchDownloaderCLI\\TwitchDownloaderCLI.exe"
+    "ExecutablePath": "C:\\Tools\\TwitchDownloaderCLI\\TwitchDownloaderCLI.exe",
+    "MaxConcurrentDownloads": 2
   }
 }
 ```
@@ -259,7 +263,7 @@ When a tracked channel goes offline:
 1. TwitchArchivist queues an archive job.
 2. The worker waits for Twitch to expose the finished archive VOD.
 3. It retries VOD discovery using the configured delay and retry count.
-4. It downloads the matching VOD with `TwitchDownloaderCLI`.
+4. It downloads the matching VOD with `TwitchDownloaderCLI`; up to `Downloader:MaxConcurrentDownloads` archive jobs can be in this stage concurrently.
 5. If enabled for that channel, it prunes older successful files after the new archive succeeds.
 
 Relevant `Twitch` settings:
