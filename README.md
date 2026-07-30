@@ -310,10 +310,11 @@ Defaults:
 Behavior:
 
 - `install-service.ps1` publishes the app, creates the Windows service, and starts it unless `-NoStart` is used.
-- `update-service.ps1` stops the service, republishes, and starts it again unless `-NoStart` is used.
+- `update-service.ps1` publishes to a staging directory while the service remains available, then stops the service, promotes the staged files, and starts it again unless `-NoStart` is used.
 - `uninstall-service.ps1` stops and deletes the service, and optionally removes the publish directory.
 - All three scripts support `-WhatIf`.
 - The install and update scripts preserve existing `appsettings*.json` files in the publish directory during republish.
+- Service updates also preserve `data`, `logs`, and `tools`; if promotion or startup fails, the updater restores the previous application files and restarts the prior deployment when it was originally running.
 - When run from an extracted bundle without a `.git` directory, the scripts skip `dotnet publish` and use the extracted directory as the publish root.
 
 These scripts require an elevated PowerShell session when they create, start, stop, or delete the Windows service.

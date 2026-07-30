@@ -130,6 +130,138 @@ function Restore-AppSettingsFiles {
     Remove-Item -LiteralPath $BackupDirectory -Recurse -Force
 }
 
+function Get-PublishItemNames {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StagingDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$PublishDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath $StagingDirectory)) {
+        throw "Staging directory does not exist: $StagingDirectory"
+    }
+
+    return @(
+        @($StagingDirectory, $PublishDirectory) |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            ForEach-Object { Get-ChildItem -LiteralPath $_ -Force } |
+            Where-Object {
+                $_.Name -notlike "appsettings*.json" -and
+                $_.Name -notin @("data", "logs", "tools")
+            } |
+            Select-Object -ExpandProperty Name |
+            Sort-Object -Unique
+    )
+}
+
+function Restore-PublishBackup {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StagingDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$PublishDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$BackupDirectory,
+
+        [Parameter(Mandatory)]
+        [string[]]$ItemNames
+    )
+
+    for ($index = $ItemNames.Count - 1; $index -ge 0; $index--) {
+        $itemName = $ItemNames[$index]
+        $stagedPath = Join-Path $StagingDirectory $itemName
+        $publishedPath = Join-Path $PublishDirectory $itemName
+        $backupPath = Join-Path $BackupDirectory $itemName
+
+        if (Test-Path -LiteralPath $publishedPath) {
+            if (Test-Path -LiteralPath $stagedPath) {
+                throw "Cannot roll back '$itemName' because the staging path already exists."
+            }
+
+            Move-Item -LiteralPath $publishedPath -Destination $stagedPath
+        }
+
+        if (Test-Path -LiteralPath $backupPath) {
+            Move-Item -LiteralPath $backupPath -Destination $publishedPath
+        }
+    }
+}
+
+function Move-StagedPublishIntoPlace {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StagingDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$PublishDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$BackupDirectory,
+
+        [Parameter(Mandatory)]
+        [string[]]$ItemNames
+    )
+
+    $resolvedStagingDirectory = [System.IO.Path]::GetFullPath($StagingDirectory)
+    $resolvedPublishDirectory = [System.IO.Path]::GetFullPath($PublishDirectory)
+    $resolvedBackupDirectory = [System.IO.Path]::GetFullPath($BackupDirectory)
+    if ($resolvedStagingDirectory -eq $resolvedPublishDirectory -or
+        $resolvedStagingDirectory -eq $resolvedBackupDirectory -or
+        $resolvedPublishDirectory -eq $resolvedBackupDirectory) {
+        throw "Staging, publish, and backup directories must be distinct."
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedStagingDirectory)) {
+        throw "Staging directory does not exist: $resolvedStagingDirectory"
+    }
+
+    if (Test-Path -LiteralPath $resolvedBackupDirectory) {
+        throw "Backup directory already exists: $resolvedBackupDirectory"
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedPublishDirectory)) {
+        New-Item -ItemType Directory -Path $resolvedPublishDirectory -Force | Out-Null
+    }
+
+    New-Item -ItemType Directory -Path $resolvedBackupDirectory | Out-Null
+    $preparedItemNames = [System.Collections.Generic.List[string]]::new()
+
+    try {
+        foreach ($itemName in $ItemNames) {
+            $stagedPath = Join-Path $resolvedStagingDirectory $itemName
+            $publishedPath = Join-Path $resolvedPublishDirectory $itemName
+            $backupPath = Join-Path $resolvedBackupDirectory $itemName
+
+            $stagedItemExists = Test-Path -LiteralPath $stagedPath
+            $publishedItemExists = Test-Path -LiteralPath $publishedPath
+            if (-not $stagedItemExists -and -not $publishedItemExists) {
+                throw "Publish item does not exist in staging or the live directory: $itemName"
+            }
+
+            if ($publishedItemExists) {
+                Move-Item -LiteralPath $publishedPath -Destination $backupPath
+            }
+
+            $preparedItemNames.Add($itemName)
+            if ($stagedItemExists) {
+                Move-Item -LiteralPath $stagedPath -Destination $publishedPath
+            }
+        }
+    }
+    catch {
+        Restore-PublishBackup `
+            -StagingDirectory $resolvedStagingDirectory `
+            -PublishDirectory $resolvedPublishDirectory `
+            -BackupDirectory $resolvedBackupDirectory `
+            -ItemNames $preparedItemNames.ToArray()
+        throw
+    }
+}
+
 function Invoke-DotNetPublish {
     param(
         [Parameter(Mandatory)]
