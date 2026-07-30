@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -91,7 +92,7 @@ public class TwitchApiClientTests
             ClientId = "client-id"
         });
 
-        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+        var helixClient = new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
 
         var subscriptions = await helixClient.GetEventSubscriptionsAsync(CancellationToken.None);
 
@@ -181,7 +182,7 @@ public class TwitchApiClientTests
             ClientId = "client-id"
         });
 
-        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+        var helixClient = new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
 
         var subscriptions = await helixClient.GetEventSubscriptionsAsync(CancellationToken.None);
 
@@ -231,7 +232,7 @@ public class TwitchApiClientTests
             EventSubTransportMode = "conduit-websocket"
         });
 
-        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+        var helixClient = new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
 
         var subscriptions = await helixClient.GetEventSubscriptionsAsync(CancellationToken.None);
 
@@ -270,7 +271,7 @@ public class TwitchApiClientTests
             EventSubTransportMode = "websocket"
         });
 
-        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+        var helixClient = new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
 
         var subscriptions = await helixClient.GetEventSubscriptionsAsync(CancellationToken.None);
 
@@ -313,7 +314,7 @@ public class TwitchApiClientTests
             ClientId = "client-id"
         });
 
-        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+        var helixClient = new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
 
         var vod = await helixClient.GetLatestArchiveVodAsync(
             "12345",
@@ -358,7 +359,7 @@ public class TwitchApiClientTests
             ClientId = "client-id"
         });
 
-        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+        var helixClient = new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
 
         var userId = await helixClient.ResolveUserIdAsync("testchannel", CancellationToken.None);
 
@@ -403,7 +404,7 @@ public class TwitchApiClientTests
             ClientId = "client-id"
         });
 
-        var helixClient = new TwitchHelixClient(factory, authProvider, options);
+        var helixClient = new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
 
         var channels = await helixClient.SearchChannelsAsync("test", CancellationToken.None);
 
@@ -725,6 +726,85 @@ public class TwitchApiClientTests
         Assert.Equal(6, conduit.ShardCount);
     }
 
+    [Fact]
+    public async Task HelixClientRetriesGetAfterTransientTransportFailures()
+    {
+        var attemptCount = 0;
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            attemptCount++;
+            if (attemptCount < 3)
+            {
+                throw new HttpRequestException("Temporary DNS failure");
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "12345"
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+        var helixClient = CreateHelixClient(handler);
+
+        var userId = await helixClient.ResolveUserIdAsync("testchannel", CancellationToken.None);
+
+        Assert.Equal("12345", userId);
+        Assert.Equal(3, attemptCount);
+    }
+
+    [Fact]
+    public async Task HelixClientDoesNotRetryPostAfterTransientTransportFailure()
+    {
+        var attemptCount = 0;
+        var handler = new StubHttpMessageHandler(
+            new Func<HttpRequestMessage, HttpResponseMessage>(_ =>
+            {
+                attemptCount++;
+                throw new HttpRequestException("Temporary DNS failure");
+            }));
+        var helixClient = CreateHelixClient(handler);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => helixClient.CreateEventSubConduitAsync(4, CancellationToken.None));
+
+        Assert.Equal(1, attemptCount);
+    }
+
+    [Fact]
+    public async Task HelixClientCancelsGetDuringRetryDelay()
+    {
+        using var cancellationTokenSource = new CancellationTokenSource();
+        var attemptCount = 0;
+        var handler = new StubHttpMessageHandler(
+            new Func<HttpRequestMessage, HttpResponseMessage>(_ =>
+            {
+                attemptCount++;
+                throw new HttpRequestException("Temporary DNS failure");
+            }));
+        var helixClient = CreateHelixClient(handler);
+        cancellationTokenSource.CancelAfter(TimeSpan.FromMilliseconds(100));
+        var stopwatch = Stopwatch.StartNew();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => helixClient.ResolveUserIdAsync("testchannel", cancellationTokenSource.Token));
+
+        stopwatch.Stop();
+        Assert.Equal(1, attemptCount);
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromMilliseconds(750),
+            $"Cancellation took {stopwatch.Elapsed}.");
+    }
+
     private static TwitchHelixClient CreateHelixClient(HttpMessageHandler handler)
     {
         var client = new HttpClient(handler)
@@ -738,7 +818,7 @@ public class TwitchApiClientTests
             ClientId = "client-id"
         });
 
-        return new TwitchHelixClient(factory, authProvider, options);
+        return new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
     }
 
     private sealed class StubAccessTokenProvider(string userToken = "test-token", string appToken = "test-token") : ITwitchAccessTokenProvider

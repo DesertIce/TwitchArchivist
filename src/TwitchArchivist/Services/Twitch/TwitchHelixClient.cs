@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
+using Polly;
 using TwitchArchivist.Models;
 
 namespace TwitchArchivist.Services.Twitch;
@@ -11,8 +12,11 @@ namespace TwitchArchivist.Services.Twitch;
 public class TwitchHelixClient(
     IHttpClientFactory httpClientFactory,
     ITwitchAccessTokenProvider accessTokenProvider,
-    IOptions<TwitchOptions> twitchOptions) : ITwitchHelixClient
+    IOptions<TwitchOptions> twitchOptions,
+    ILogger<TwitchHelixClient> logger) : ITwitchHelixClient
 {
+    private const int TransportRetryCount = 2;
+
     public async Task<string?> ResolveUserIdAsync(string twitchLogin, CancellationToken cancellationToken)
     {
         var response = await SendHelixAsync<HelixEnvelope<UserRecord>>(
@@ -367,16 +371,23 @@ public class TwitchHelixClient(
         var options = twitchOptions.Value;
         var client = httpClientFactory.CreateClient(nameof(TwitchHelixClient));
         var normalizedPath = relativePath.TrimStart('/');
-        using var request = new HttpRequestMessage(method, new Uri(client.BaseAddress!, normalizedPath));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Headers.Add("Client-Id", options.ClientId);
-
-        if (body is not null)
+        async Task<HttpResponseMessage> SendRequestAsync()
         {
-            request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(method, new Uri(client.BaseAddress!, normalizedPath));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("Client-Id", options.ClientId);
+
+            if (body is not null)
+            {
+                request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+            }
+
+            return await client.SendAsync(request, cancellationToken);
         }
 
-        using var response = await client.SendAsync(request, cancellationToken);
+        using var response = method == HttpMethod.Get
+            ? await CreateGetTransportRetryPolicy(requestContext).ExecuteAsync(_ => SendRequestAsync(), cancellationToken)
+            : await SendRequestAsync();
         if (!response.IsSuccessStatusCode)
         {
             var responseBody = response.Content is null ? string.Empty : await response.Content.ReadAsStringAsync(cancellationToken);
@@ -395,6 +406,25 @@ public class TwitchHelixClient(
 
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
     }
+
+    private AsyncPolicy CreateGetTransportRetryPolicy(string requestContext)
+        => Policy
+            .Handle<HttpRequestException>(exception => exception.StatusCode is null)
+            .WaitAndRetryAsync(
+                retryCount: TransportRetryCount,
+                sleepDurationProvider: retryAttempt =>
+                    TimeSpan.FromSeconds(Math.Pow(2, retryAttempt - 1)) +
+                    TimeSpan.FromMilliseconds(Random.Shared.Next(0, 251)),
+                onRetry: (exception, delay, retryAttempt, _) =>
+                {
+                    logger.LogWarning(
+                        exception,
+                        "Retrying Twitch Helix GET after a transient transport failure while {RequestContext}. Attempt {RetryAttempt}/{RetryCount} in {RetryDelay}",
+                        requestContext,
+                        retryAttempt,
+                        TransportRetryCount,
+                        delay);
+                });
 
     private sealed class HelixEnvelope<TRecord>
     {
