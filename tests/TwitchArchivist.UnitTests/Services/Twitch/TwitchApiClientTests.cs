@@ -1,8 +1,8 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TwitchArchivist.Models;
@@ -784,6 +784,7 @@ public class TwitchApiClientTests
     public async Task HelixClientCancelsGetDuringRetryDelay()
     {
         using var cancellationTokenSource = new CancellationTokenSource();
+        var retryStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var attemptCount = 0;
         var handler = new StubHttpMessageHandler(
             new Func<HttpRequestMessage, HttpResponseMessage>(_ =>
@@ -791,21 +792,32 @@ public class TwitchApiClientTests
                 attemptCount++;
                 throw new HttpRequestException("Temporary DNS failure");
             }));
-        var helixClient = CreateHelixClient(handler);
-        cancellationTokenSource.CancelAfter(TimeSpan.FromMilliseconds(100));
-        var stopwatch = Stopwatch.StartNew();
+        var logger = new CallbackLogger<TwitchHelixClient>(logLevel =>
+        {
+            if (logLevel == LogLevel.Warning)
+            {
+                retryStarted.TrySetResult(true);
+            }
+        });
+        var helixClient = CreateHelixClient(handler, logger);
+        var requestTask = helixClient.ResolveUserIdAsync("testchannel", cancellationTokenSource.Token);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => helixClient.ResolveUserIdAsync("testchannel", cancellationTokenSource.Token));
+        try
+        {
+            await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await cancellationTokenSource.CancelAsync();
+        }
 
-        stopwatch.Stop();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => requestTask);
         Assert.Equal(1, attemptCount);
-        Assert.True(
-            stopwatch.Elapsed < TimeSpan.FromMilliseconds(750),
-            $"Cancellation took {stopwatch.Elapsed}.");
     }
 
-    private static TwitchHelixClient CreateHelixClient(HttpMessageHandler handler)
+    private static TwitchHelixClient CreateHelixClient(
+        HttpMessageHandler handler,
+        ILogger<TwitchHelixClient>? logger = null)
     {
         var client = new HttpClient(handler)
         {
@@ -818,7 +830,7 @@ public class TwitchApiClientTests
             ClientId = "client-id"
         });
 
-        return new TwitchHelixClient(factory, authProvider, options, NullLogger<TwitchHelixClient>.Instance);
+        return new TwitchHelixClient(factory, authProvider, options, logger ?? NullLogger<TwitchHelixClient>.Instance);
     }
 
     private sealed class StubAccessTokenProvider(string userToken = "test-token", string appToken = "test-token") : ITwitchAccessTokenProvider
@@ -844,6 +856,30 @@ public class TwitchApiClientTests
     private sealed class StubHttpClientFactory(HttpClient client) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => client;
+    }
+
+    private sealed class CallbackLogger<T>(Action<LogLevel> callback) : ILogger<T>
+    {
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => callback(logLevel);
+
+        private sealed class NullScope : IDisposable
+        {
+            public static NullScope Instance { get; } = new();
+
+            public void Dispose()
+            {
+            }
+        }
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

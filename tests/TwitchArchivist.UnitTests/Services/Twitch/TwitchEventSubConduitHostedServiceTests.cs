@@ -196,8 +196,14 @@ public class TwitchEventSubConduitHostedServiceTests
             }));
 
         await service.StartAsync(CancellationToken.None);
-        await Task.Delay(1200);
-        await service.StopAsync(CancellationToken.None);
+        try
+        {
+            await subscriptionSynchronizer.SecondCallObserved.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
 
         Assert.True(subscriptionSynchronizer.CallCount >= 2);
     }
@@ -453,16 +459,21 @@ public class TwitchEventSubConduitHostedServiceTests
 
     private sealed class FlakySubscriptionSynchronizer : IEventSubSubscriptionSynchronizer
     {
-        public int CallCount { get; private set; }
+        private readonly TaskCompletionSource<bool> _secondCallObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _callCount;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+        public Task SecondCallObserved => _secondCallObserved.Task;
 
         public Task EnsureSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
         {
-            CallCount++;
-            if (CallCount == 1)
+            var callCount = Interlocked.Increment(ref _callCount);
+            if (callCount == 1)
             {
                 throw new InvalidOperationException("boom");
             }
 
+            _secondCallObserved.TrySetResult(true);
             return Task.CompletedTask;
         }
     }
