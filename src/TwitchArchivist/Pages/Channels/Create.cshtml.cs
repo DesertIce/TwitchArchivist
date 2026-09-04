@@ -37,6 +37,7 @@ public class CreateModel(
         dbContext.ChannelConfigurations.Add(new ChannelConfiguration
         {
             TwitchLogin = normalizedLogin,
+            Alias = string.IsNullOrWhiteSpace(Input.Alias) ? null : Input.Alias.Trim(),
             OutputDirectory = outputDirectory,
             IsEnabled = true,
             AutoPruneEnabled = Input.AutoPruneEnabled,
@@ -56,6 +57,10 @@ public class CreateModel(
         [Required]
         [StringLength(128)]
         public string TwitchLogin { get; set; } = string.Empty;
+
+        [Display(Name = "Filename alias")]
+        [StringLength(128)]
+        public string? Alias { get; set; }
 
         [Display(Name = "Output directory")]
         [Required]

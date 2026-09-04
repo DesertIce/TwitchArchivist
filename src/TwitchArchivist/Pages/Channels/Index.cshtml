@@ -30,6 +30,7 @@
                     <tr>
                         <th scope="col">Live</th>
                         <th scope="col">Twitch login</th>
+                        <th scope="col">Filename alias</th>
                         <th scope="col">Output directory</th>
                         <th scope="col">Enabled</th>
                         <th scope="col">Auto prune</th>
@@ -44,6 +45,7 @@
                     <tr>
                         <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsLive)">@(channel.IsLive ? "Live" : "Offline")</span></td>
                         <td><span class="mono">@channel.TwitchLogin</span></td>
+                        <td><span class="mono">@(channel.Alias ?? "—")</span></td>
                         <td><span class="mono">@channel.OutputDirectory</span></td>
                         <td><span class="badge @UiBadges.BoolBadgeClass(channel.IsEnabled)">@(channel.IsEnabled ? "Yes" : "No")</span></td>
                         <td>

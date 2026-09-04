@@ -214,6 +214,7 @@ Primary pages:
 Channel mapping behavior:
 
 - Each channel maps to one output directory.
+- An optional filename alias can replace the Twitch login in newly generated archive filenames.
 - The UI supports Twitch login autocomplete via Helix search.
 - Auto-prune can be enabled per channel.
 - `AutoPruneVodCount` controls how many successful VOD files are retained after a new successful archive.

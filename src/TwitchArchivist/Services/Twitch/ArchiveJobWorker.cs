@@ -187,6 +187,7 @@ public class ArchiveJobWorker(
             ? BuildOutputPath(
                 job.ChannelConfiguration.OutputDirectory,
                 job.ChannelConfiguration.TwitchLogin,
+                job.ChannelConfiguration.Alias,
                 vod ?? new ArchiveVodRecord(vodId, job.CreatedUtc))
             : job.OutputPath;
         job.OutputPath = outputPath;
@@ -307,8 +308,12 @@ public class ArchiveJobWorker(
         return null;
     }
 
-    private static string BuildOutputPath(string outputDirectory, string channelName, ArchiveVodRecord vod)
+    private static string BuildOutputPath(
+        string outputDirectory,
+        string twitchLogin,
+        string? alias,
+        ArchiveVodRecord vod)
     {
-        return ArchiveOutputPathBuilder.Build(outputDirectory, channelName, vod);
+        return ArchiveOutputPathBuilder.Build(outputDirectory, twitchLogin, alias, vod);
     }
 }

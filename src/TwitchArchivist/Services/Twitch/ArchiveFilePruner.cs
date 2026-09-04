@@ -23,7 +23,7 @@ public static class ArchiveFilePruner
         }
 
         var outputDirectory = Path.GetFullPath(channel.OutputDirectory);
-        var channelFilenamePrefix = ArchiveOutputPathBuilder.GetChannelFilenamePrefix(channel.TwitchLogin);
+        var channelFilenamePrefix = ArchiveOutputPathBuilder.GetChannelFilenamePrefix(channel.TwitchLogin, channel.Alias);
         var successfulJobs = await dbContext.ArchiveJobs
             .Where(x => x.ChannelConfigurationId == channel.Id &&
                         x.Status == ArchiveJobStatus.Succeeded &&

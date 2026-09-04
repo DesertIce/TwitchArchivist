@@ -26,6 +26,7 @@ public class TwitchArchivistDbContext(DbContextOptions<TwitchArchivistDbContext>
         modelBuilder.Entity<ChannelConfiguration>(entity =>
         {
             entity.Property(x => x.TwitchLogin).HasMaxLength(128);
+            entity.Property(x => x.Alias).HasMaxLength(128);
             entity.Property(x => x.TwitchUserId).HasMaxLength(64);
             entity.Property(x => x.OutputDirectory).HasMaxLength(1024);
             entity.HasIndex(x => x.TwitchLogin).IsUnique();

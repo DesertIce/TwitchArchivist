@@ -31,6 +31,7 @@ public class ChannelsPageIntegrationTests
         Assert.Contains("data-directory-picker-portal", payload);
         Assert.Contains("data-twitch-login-autocomplete", payload);
         Assert.Contains("data-twitch-login-suggestions", payload);
+        Assert.Contains("name=\"Input.Alias\"", payload);
     }
 
     [Fact]

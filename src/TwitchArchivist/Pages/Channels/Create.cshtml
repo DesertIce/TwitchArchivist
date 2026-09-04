@@ -22,6 +22,12 @@
                 <p class="field-hint">The lowercase Twitch username, without the URL or @@ symbol.</p>
             </div>
             <div>
+                <label asp-for="Input.Alias"></label>
+                <input asp-for="Input.Alias" />
+                <span asp-validation-for="Input.Alias"></span>
+                <p class="field-hint">Optional. Used instead of the Twitch login in generated filenames.</p>
+            </div>
+            <div>
                 <label asp-for="Input.OutputDirectory"></label>
                 <div class="input-with-button">
                     <input asp-for="Input.OutputDirectory" data-directory-picker="true" />

@@ -25,6 +25,7 @@ public class ArchiveFilePrunerTests
             var channel = new ChannelConfiguration
             {
                 TwitchLogin = "alpha",
+                Alias = "alpha-archive",
                 OutputDirectory = outputDirectory,
                 IsEnabled = true,
                 AutoPruneEnabled = true,
@@ -35,9 +36,9 @@ public class ArchiveFilePrunerTests
             dbContext.ChannelConfigurations.Add(channel);
             await dbContext.SaveChangesAsync();
 
-            var oldestPath = Path.Combine(outputDirectory, "alpha-2026-04-25-oldest-1.mp4");
-            var middlePath = Path.Combine(outputDirectory, "alpha-2026-04-26-middle-2.mp4");
-            var newestPath = Path.Combine(outputDirectory, "alpha-2026-04-27-newest-3.mp4");
+            var oldestPath = Path.Combine(outputDirectory, "alpha-archive-2026-04-25-oldest-1.mp4");
+            var middlePath = Path.Combine(outputDirectory, "alpha-archive-2026-04-26-middle-2.mp4");
+            var newestPath = Path.Combine(outputDirectory, "alpha-archive-2026-04-27-newest-3.mp4");
             var failedPath = Path.Combine(outputDirectory, "alpha-2026-04-28-failed-4.mp4");
 
             File.WriteAllText(oldestPath, "oldest");

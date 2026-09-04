@@ -25,6 +25,7 @@ public class ChannelMappingPruneSettingsTests
                 Input = new CreateModel.InputModel
                 {
                     TwitchLogin = "Alpha",
+                    Alias = " Alpha Archive ",
                     OutputDirectory = outputDirectory,
                     AutoPruneEnabled = true,
                     AutoPruneVodCount = 7
@@ -37,6 +38,7 @@ public class ChannelMappingPruneSettingsTests
             Assert.Equal("/Channels/Index", redirect.PageName);
 
             var channel = await dbContext.ChannelConfigurations.SingleAsync();
+            Assert.Equal("Alpha Archive", channel.Alias);
             Assert.True(channel.AutoPruneEnabled);
             Assert.Equal(7, channel.AutoPruneVodCount);
         }
@@ -100,6 +102,7 @@ public class ChannelMappingPruneSettingsTests
                 var channel = new ChannelConfiguration
                 {
                     TwitchLogin = "alpha",
+                    Alias = "Alpha Archive",
                     OutputDirectory = initialDirectory,
                     IsEnabled = true,
                     AutoPruneEnabled = false,
@@ -119,6 +122,7 @@ public class ChannelMappingPruneSettingsTests
 
                 var getResult = await model.OnGetAsync(channelId);
                 Assert.IsType<Microsoft.AspNetCore.Mvc.RazorPages.PageResult>(getResult);
+                Assert.Equal("Alpha Archive", model.Input.Alias);
                 Assert.False(model.Input.AutoPruneEnabled);
                 Assert.Equal(5, model.Input.AutoPruneVodCount);
 
@@ -126,6 +130,7 @@ public class ChannelMappingPruneSettingsTests
                 {
                     Id = channelId,
                     TwitchLogin = "alpha",
+                    Alias = " Updated Archive ",
                     OutputDirectory = updatedDirectory,
                     IsEnabled = true,
                     AutoPruneEnabled = true,
@@ -141,6 +146,7 @@ public class ChannelMappingPruneSettingsTests
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
                 var channel = await dbContext.ChannelConfigurations.SingleAsync();
+                Assert.Equal("Updated Archive", channel.Alias);
                 Assert.True(channel.AutoPruneEnabled);
                 Assert.Equal(3, channel.AutoPruneVodCount);
                 Assert.Equal(updatedDirectory, channel.OutputDirectory);

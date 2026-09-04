@@ -146,7 +146,39 @@ public class ArchiveJobWorkerTests
         }
     }
 
-    private static async Task SeedRunnableJobsAsync(IServiceProvider services, int count)
+    [Fact]
+    public async Task ExecuteAsync_UsesChannelAliasInGeneratedOutputPath()
+    {
+        await using var database = await CreateDatabaseAsync();
+        await SeedRunnableJobsAsync(database.Services, 1, "Alpha Archive");
+
+        var worker = new ArchiveJobWorker(
+            database.Services.GetRequiredService<IServiceScopeFactory>(),
+            new ArchiveJobQueue(),
+            new ThrowingTwitchHelixClient(),
+            new SuccessfulDownloaderRunner(),
+            Options.Create(new TwitchOptions()),
+            Options.Create(new DownloaderOptions()),
+            NullLogger<ArchiveJobWorker>.Instance);
+
+        await worker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var job = await WaitForSingleJobStatusAsync(
+                database.Services,
+                ArchiveJobStatus.Succeeded,
+                TimeSpan.FromSeconds(3));
+
+            Assert.StartsWith("Alpha Archive-", Path.GetFileName(job.OutputPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task SeedRunnableJobsAsync(IServiceProvider services, int count, string? alias = null)
     {
         await using var scope = services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
@@ -154,6 +186,7 @@ public class ArchiveJobWorkerTests
         var channel = new ChannelConfiguration
         {
             TwitchLogin = "alpha",
+            Alias = alias,
             TwitchUserId = "user-alpha",
             OutputDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             IsEnabled = true,
@@ -293,6 +326,15 @@ public class ArchiveJobWorkerTests
             string vodId,
             string outputPath,
             CancellationToken cancellationToken) => throw exception;
+    }
+
+    private sealed class SuccessfulDownloaderRunner : ITwitchDownloaderRunner
+    {
+        public Task<TwitchDownloaderResult> DownloadVideoAsync(
+            string vodId,
+            string outputPath,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new TwitchDownloaderResult(true, 0, "downloaded", string.Empty));
     }
 
     private sealed class ThrowingTwitchHelixClient : ITwitchHelixClient

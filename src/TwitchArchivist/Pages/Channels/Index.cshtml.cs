@@ -16,6 +16,7 @@ public class IndexModel(TwitchArchivistDbContext dbContext) : PageModel
             .Select(x => new ChannelRow(
                 x.Id,
                 x.TwitchLogin,
+                x.Alias,
                 x.OutputDirectory,
                 x.IsEnabled,
                 x.AutoPruneEnabled,
@@ -32,6 +33,7 @@ public class IndexModel(TwitchArchivistDbContext dbContext) : PageModel
     public sealed record ChannelRow(
         int Id,
         string TwitchLogin,
+        string? Alias,
         string OutputDirectory,
         bool IsEnabled,
         bool AutoPruneEnabled,

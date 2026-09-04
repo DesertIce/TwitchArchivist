@@ -6,6 +6,8 @@ public class ChannelConfiguration
 
     public string TwitchLogin { get; set; } = string.Empty;
 
+    public string? Alias { get; set; }
+
     public string? TwitchUserId { get; set; }
 
     public string OutputDirectory { get; set; } = string.Empty;

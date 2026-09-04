@@ -26,6 +26,7 @@ public class EditModel(
         {
             Id = entity.Id,
             TwitchLogin = entity.TwitchLogin,
+            Alias = entity.Alias,
             OutputDirectory = entity.OutputDirectory,
             IsEnabled = entity.IsEnabled,
             AutoPruneEnabled = entity.AutoPruneEnabled,
@@ -58,6 +59,7 @@ public class EditModel(
         Directory.CreateDirectory(Input.OutputDirectory.Trim());
 
         entity.TwitchLogin = normalizedLogin;
+        entity.Alias = string.IsNullOrWhiteSpace(Input.Alias) ? null : Input.Alias.Trim();
         entity.OutputDirectory = Input.OutputDirectory.Trim();
         entity.IsEnabled = Input.IsEnabled;
         entity.AutoPruneEnabled = Input.AutoPruneEnabled;
@@ -90,6 +92,10 @@ public class EditModel(
         [Required]
         [StringLength(128)]
         public string TwitchLogin { get; set; } = string.Empty;
+
+        [Display(Name = "Filename alias")]
+        [StringLength(128)]
+        public string? Alias { get; set; }
 
         [Display(Name = "Output directory")]
         [Required]

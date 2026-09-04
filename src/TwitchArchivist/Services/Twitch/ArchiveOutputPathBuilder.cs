@@ -4,17 +4,17 @@ namespace TwitchArchivist.Services.Twitch;
 
 public static class ArchiveOutputPathBuilder
 {
-    public static string GetChannelFilenamePrefix(string channelName)
+    public static string GetChannelFilenamePrefix(string twitchLogin, string? alias)
     {
-        var safeChannelName = SanitizeSegment(channelName);
+        var safeChannelName = SanitizeSegment(ResolveChannelFilenameName(twitchLogin, alias));
         return string.IsNullOrWhiteSpace(safeChannelName)
             ? string.Empty
             : $"{safeChannelName}-";
     }
 
-    public static string Build(string outputDirectory, string channelName, ArchiveVodRecord vod)
+    public static string Build(string outputDirectory, string twitchLogin, string? alias, ArchiveVodRecord vod)
     {
-        var safeChannelName = SanitizeSegment(channelName);
+        var safeChannelName = SanitizeSegment(ResolveChannelFilenameName(twitchLogin, alias));
         var safeTitle = SanitizeSegment(vod.Title);
         var dateSegment = vod.CreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd");
 
@@ -49,6 +49,11 @@ public static class ArchiveOutputPathBuilder
 
             counter += 1;
         }
+    }
+
+    private static string ResolveChannelFilenameName(string twitchLogin, string? alias)
+    {
+        return string.IsNullOrWhiteSpace(alias) ? twitchLogin : alias.Trim();
     }
 
     private static string SanitizeSegment(string? value)

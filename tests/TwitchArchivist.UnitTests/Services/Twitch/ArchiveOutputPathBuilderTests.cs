@@ -13,6 +13,7 @@ public class ArchiveOutputPathBuilderTests
         var path = ArchiveOutputPathBuilder.Build(
             outputDirectory,
             "testchannel",
+            null,
             new ArchiveVodRecord(
                 "123456789",
                 new DateTimeOffset(2026, 4, 28, 19, 30, 0, TimeSpan.Zero),
@@ -31,6 +32,7 @@ public class ArchiveOutputPathBuilderTests
         var path = ArchiveOutputPathBuilder.Build(
             outputDirectory,
             "testchannel",
+            null,
             new ArchiveVodRecord(
                 "123456789",
                 new DateTimeOffset(2026, 4, 28, 19, 30, 0, TimeSpan.Zero),
@@ -54,6 +56,7 @@ public class ArchiveOutputPathBuilderTests
             var path = ArchiveOutputPathBuilder.Build(
                 outputDirectory,
                 "testchannel",
+                null,
                 new ArchiveVodRecord(
                     "123456789",
                     new DateTimeOffset(2026, 4, 28, 19, 30, 0, TimeSpan.Zero),
@@ -67,5 +70,24 @@ public class ArchiveOutputPathBuilderTests
         {
             Directory.Delete(outputDirectory, recursive: true);
         }
+    }
+
+    [Fact]
+    public void BuildUsesAliasInsteadOfTwitchLoginWhenConfigured()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture));
+
+        var path = ArchiveOutputPathBuilder.Build(
+            outputDirectory,
+            "testchannel",
+            "My Channel",
+            new ArchiveVodRecord(
+                "123456789",
+                new DateTimeOffset(2026, 4, 28, 19, 30, 0, TimeSpan.Zero),
+                null));
+
+        Assert.Equal(
+            Path.Combine(outputDirectory, "My Channel-2026-04-28-123456789.mp4"),
+            path);
     }
 }
