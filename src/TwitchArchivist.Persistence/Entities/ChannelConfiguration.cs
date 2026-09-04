@@ -18,6 +18,10 @@ public class ChannelConfiguration
 
     public int AutoPruneVodCount { get; set; } = 10;
 
+    public bool CompressEnabled { get; set; }
+
+    public int CompressVodCount { get; set; } = 10;
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset UpdatedUtc { get; set; }

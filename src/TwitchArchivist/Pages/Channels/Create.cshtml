@@ -47,7 +47,20 @@
                 <label asp-for="Input.AutoPruneVodCount"></label>
                 <input asp-for="Input.AutoPruneVodCount" type="number" min="1" />
                 <span asp-validation-for="Input.AutoPruneVodCount"></span>
-                <p class="field-hint">How many successful VOD files to keep for this mapping when auto prune is enabled.</p>
+                <p class="field-hint">How many recent successful VOD files to keep uncompressed when auto prune is enabled.</p>
+            </div>
+            <div>
+                <label class="label-inline">
+                    <input asp-for="Input.CompressEnabled" data-auto-prune-toggle="true" data-auto-prune-target="Input_CompressVodCount" />
+                    <span>@Html.DisplayNameFor(x => x.Input.CompressEnabled)</span>
+                </label>
+                <p class="field-hint">Off by default. When enabled with auto prune, the next tier of older VODs is retained as gzip files.</p>
+            </div>
+            <div>
+                <label asp-for="Input.CompressVodCount"></label>
+                <input asp-for="Input.CompressVodCount" type="number" min="1" />
+                <span asp-validation-for="Input.CompressVodCount"></span>
+                <p class="field-hint">Additional gzip-compressed files to keep before ultimate deletion.</p>
             </div>
         </div>
         <div class="actions">

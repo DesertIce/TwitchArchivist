@@ -42,6 +42,8 @@ public class CreateModel(
             IsEnabled = true,
             AutoPruneEnabled = Input.AutoPruneEnabled,
             AutoPruneVodCount = Input.AutoPruneVodCount,
+            CompressEnabled = Input.CompressEnabled,
+            CompressVodCount = Input.CompressVodCount,
             CreatedUtc = timestamp,
             UpdatedUtc = timestamp
         });
@@ -73,5 +75,12 @@ public class CreateModel(
         [Display(Name = "Keep most recent VOD count")]
         [Range(1, 1000)]
         public int AutoPruneVodCount { get; set; } = 10;
+
+        [Display(Name = "Compress older VOD files")]
+        public bool CompressEnabled { get; set; }
+
+        [Display(Name = "Additional compressed VOD count")]
+        [Range(1, 1000)]
+        public int CompressVodCount { get; set; } = 10;
     }
 }

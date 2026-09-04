@@ -28,7 +28,9 @@ public class ChannelMappingPruneSettingsTests
                     Alias = " Alpha Archive ",
                     OutputDirectory = outputDirectory,
                     AutoPruneEnabled = true,
-                    AutoPruneVodCount = 7
+                    AutoPruneVodCount = 7,
+                    CompressEnabled = true,
+                    CompressVodCount = 12
                 }
             };
 
@@ -41,6 +43,8 @@ public class ChannelMappingPruneSettingsTests
             Assert.Equal("Alpha Archive", channel.Alias);
             Assert.True(channel.AutoPruneEnabled);
             Assert.Equal(7, channel.AutoPruneVodCount);
+            Assert.True(channel.CompressEnabled);
+            Assert.Equal(12, channel.CompressVodCount);
         }
         finally
         {
@@ -107,6 +111,8 @@ public class ChannelMappingPruneSettingsTests
                     IsEnabled = true,
                     AutoPruneEnabled = false,
                     AutoPruneVodCount = 5,
+                    CompressEnabled = false,
+                    CompressVodCount = 6,
                     CreatedUtc = DateTimeOffset.UtcNow.AddDays(-2),
                     UpdatedUtc = DateTimeOffset.UtcNow.AddDays(-1)
                 };
@@ -125,6 +131,8 @@ public class ChannelMappingPruneSettingsTests
                 Assert.Equal("Alpha Archive", model.Input.Alias);
                 Assert.False(model.Input.AutoPruneEnabled);
                 Assert.Equal(5, model.Input.AutoPruneVodCount);
+                Assert.False(model.Input.CompressEnabled);
+                Assert.Equal(6, model.Input.CompressVodCount);
 
                 model.Input = new EditModel.InputModel
                 {
@@ -134,7 +142,9 @@ public class ChannelMappingPruneSettingsTests
                     OutputDirectory = updatedDirectory,
                     IsEnabled = true,
                     AutoPruneEnabled = true,
-                    AutoPruneVodCount = 3
+                    AutoPruneVodCount = 3,
+                    CompressEnabled = true,
+                    CompressVodCount = 10
                 };
 
                 var postResult = await model.OnPostAsync();
@@ -149,6 +159,8 @@ public class ChannelMappingPruneSettingsTests
                 Assert.Equal("Updated Archive", channel.Alias);
                 Assert.True(channel.AutoPruneEnabled);
                 Assert.Equal(3, channel.AutoPruneVodCount);
+                Assert.True(channel.CompressEnabled);
+                Assert.Equal(10, channel.CompressVodCount);
                 Assert.Equal(updatedDirectory, channel.OutputDirectory);
             }
         }

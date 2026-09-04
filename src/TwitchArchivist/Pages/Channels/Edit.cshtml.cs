@@ -30,7 +30,9 @@ public class EditModel(
             OutputDirectory = entity.OutputDirectory,
             IsEnabled = entity.IsEnabled,
             AutoPruneEnabled = entity.AutoPruneEnabled,
-            AutoPruneVodCount = entity.AutoPruneVodCount
+            AutoPruneVodCount = entity.AutoPruneVodCount,
+            CompressEnabled = entity.CompressEnabled,
+            CompressVodCount = entity.CompressVodCount
         };
 
         return Page();
@@ -64,6 +66,8 @@ public class EditModel(
         entity.IsEnabled = Input.IsEnabled;
         entity.AutoPruneEnabled = Input.AutoPruneEnabled;
         entity.AutoPruneVodCount = Input.AutoPruneVodCount;
+        entity.CompressEnabled = Input.CompressEnabled;
+        entity.CompressVodCount = Input.CompressVodCount;
         entity.UpdatedUtc = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync();
@@ -110,5 +114,12 @@ public class EditModel(
         [Display(Name = "Keep most recent VOD count")]
         [Range(1, 1000)]
         public int AutoPruneVodCount { get; set; } = 10;
+
+        [Display(Name = "Compress older VOD files")]
+        public bool CompressEnabled { get; set; }
+
+        [Display(Name = "Additional compressed VOD count")]
+        [Range(1, 1000)]
+        public int CompressVodCount { get; set; } = 10;
     }
 }

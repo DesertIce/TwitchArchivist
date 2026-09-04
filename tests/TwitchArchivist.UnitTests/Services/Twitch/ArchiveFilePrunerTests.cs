@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -125,6 +126,8 @@ public class ArchiveFilePrunerTests
                 IsEnabled = true,
                 AutoPruneEnabled = false,
                 AutoPruneVodCount = 1,
+                CompressEnabled = true,
+                CompressVodCount = 1,
                 CreatedUtc = DateTimeOffset.UtcNow.AddDays(-2),
                 UpdatedUtc = DateTimeOffset.UtcNow.AddDays(-1)
             };
@@ -165,6 +168,112 @@ public class ArchiveFilePrunerTests
 
             Assert.True(File.Exists(oldestPath));
             Assert.True(File.Exists(newestPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PruneSucceededFilesForChannelAsyncKeepsUncompressedAndGzipRetentionTiers()
+    {
+        await using var database = await CreateDatabaseAsync();
+        var outputDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDirectory);
+
+        try
+        {
+            await using var scope = database.Services.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<TwitchArchivistDbContext>();
+
+            var channel = new ChannelConfiguration
+            {
+                TwitchLogin = "alpha",
+                OutputDirectory = outputDirectory,
+                IsEnabled = true,
+                AutoPruneEnabled = true,
+                AutoPruneVodCount = 3,
+                CompressEnabled = true,
+                CompressVodCount = 10,
+                CreatedUtc = DateTimeOffset.UtcNow.AddDays(-20),
+                UpdatedUtc = DateTimeOffset.UtcNow.AddDays(-1)
+            };
+            dbContext.ChannelConfigurations.Add(channel);
+            await dbContext.SaveChangesAsync();
+
+            var paths = Enumerable.Range(1, 14)
+                .Select(index => Path.Combine(outputDirectory, $"alpha-2026-04-{index:00}-vod-{index}.mp4"))
+                .ToArray();
+            var createdBase = DateTimeOffset.Parse("2026-04-01T12:00:00Z");
+
+            for (var index = 0; index < paths.Length; index += 1)
+            {
+                await File.WriteAllTextAsync(paths[index], $"vod-content-{index + 1}");
+                dbContext.ArchiveJobs.Add(new ArchiveJob
+                {
+                    ChannelConfigurationId = channel.Id,
+                    TriggerSource = "stream.offline",
+                    Status = ArchiveJobStatus.Succeeded,
+                    OutputPath = paths[index],
+                    CreatedUtc = createdBase.AddDays(index),
+                    CompletedUtc = createdBase.AddDays(index).AddHours(1)
+                });
+            }
+
+            await dbContext.SaveChangesAsync();
+
+            await ArchiveFilePruner.PruneSucceededFilesForChannelAsync(
+                dbContext,
+                channel,
+                NullLogger.Instance,
+                CancellationToken.None);
+
+            Assert.False(File.Exists(paths[0]));
+            Assert.False(File.Exists($"{paths[0]}.gz"));
+
+            foreach (var compressedSourcePath in paths.Skip(1).Take(10))
+            {
+                Assert.False(File.Exists(compressedSourcePath));
+                Assert.True(File.Exists($"{compressedSourcePath}.gz"));
+            }
+
+            foreach (var retainedPath in paths.Skip(11))
+            {
+                Assert.True(File.Exists(retainedPath));
+                Assert.False(File.Exists($"{retainedPath}.gz"));
+            }
+
+            var compressedJobs = await dbContext.ArchiveJobs
+                .Where(x => x.OutputPath != null && x.OutputPath.EndsWith(".gz"))
+                .ToListAsync();
+            Assert.Equal(10, compressedJobs.Count);
+
+            await using (var compressedStream = File.OpenRead($"{paths[1]}.gz"))
+            await using (var gzip = new GZipStream(compressedStream, CompressionMode.Decompress))
+            using (var reader = new StreamReader(gzip))
+            {
+                Assert.Equal("vod-content-2", await reader.ReadToEndAsync());
+            }
+
+            var promotedJob = await dbContext.ArchiveJobs
+                .SingleAsync(x => x.OutputPath == $"{paths[10]}.gz");
+            promotedJob.OutputPath = paths[10];
+            channel.AutoPruneVodCount = 4;
+            channel.CompressVodCount = 9;
+            await dbContext.SaveChangesAsync();
+
+            await ArchiveFilePruner.PruneSucceededFilesForChannelAsync(
+                dbContext,
+                channel,
+                NullLogger.Instance,
+                CancellationToken.None);
+
+            Assert.Equal(13, Directory.EnumerateFiles(outputDirectory).Count());
+            Assert.Equal($"{paths[10]}.gz", promotedJob.OutputPath);
         }
         finally
         {

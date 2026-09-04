@@ -52,6 +52,10 @@
                             @if (channel.AutoPruneEnabled)
                             {
                                 <span>Keep @channel.AutoPruneVodCount</span>
+                                @if (channel.CompressEnabled)
+                                {
+                                    <div class="muted">+ @channel.CompressVodCount gzip</div>
+                                }
                             }
                             else
                             {

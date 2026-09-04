@@ -32,6 +32,8 @@ public class ChannelsPageIntegrationTests
         Assert.Contains("data-twitch-login-autocomplete", payload);
         Assert.Contains("data-twitch-login-suggestions", payload);
         Assert.Contains("name=\"Input.Alias\"", payload);
+        Assert.Contains("name=\"Input.CompressEnabled\"", payload);
+        Assert.Contains("name=\"Input.CompressVodCount\"", payload);
     }
 
     [Fact]

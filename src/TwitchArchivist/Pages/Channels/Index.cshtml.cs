@@ -21,6 +21,8 @@ public class IndexModel(TwitchArchivistDbContext dbContext) : PageModel
                 x.IsEnabled,
                 x.AutoPruneEnabled,
                 x.AutoPruneVodCount,
+                x.CompressEnabled,
+                x.CompressVodCount,
                 x.UpdatedUtc,
                 x.StreamSessionState != null &&
                 x.StreamSessionState.LastOnlineUtc.HasValue &&
@@ -38,6 +40,8 @@ public class IndexModel(TwitchArchivistDbContext dbContext) : PageModel
         bool IsEnabled,
         bool AutoPruneEnabled,
         int AutoPruneVodCount,
+        bool CompressEnabled,
+        int CompressVodCount,
         DateTimeOffset UpdatedUtc,
         bool IsLive,
         DateTimeOffset? LastLiveUtc);

@@ -688,7 +688,7 @@
             }
 
             const sync = () => {
-                target.disabled = !toggle.checked;
+                target.readOnly = !toggle.checked;
             };
 
             sync();

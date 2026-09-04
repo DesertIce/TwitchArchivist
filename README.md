@@ -10,7 +10,7 @@ It is designed to run as a Windows Service in production and as a normal ASP.NET
 - Track channel-to-directory mappings in SQLite.
 - Queue archive jobs when a stream ends, then wait for the corresponding VOD to become discoverable.
 - Download VODs by invoking an existing `TwitchDownloaderCLI.exe` installation.
-- Optionally auto-prune older successful VOD files per channel after a new archive completes.
+- Optionally auto-prune older successful VOD files per channel after a new archive completes, with an additional gzip retention tier.
 - Expose a localhost web UI plus JSON runtime endpoints for diagnostics and health checks.
 - Run with direct EventSub WebSocket transport or conduit-backed WebSocket transport.
 
@@ -218,6 +218,7 @@ Channel mapping behavior:
 - The UI supports Twitch login autocomplete via Helix search.
 - Auto-prune can be enabled per channel.
 - `AutoPruneVodCount` controls how many successful VOD files are retained after a new successful archive.
+- Optional compression retains the next `CompressVodCount` older VODs as `.gz` files before deleting anything older. For example, keeping 3 VODs and compressing 10 retains 13 files total.
 
 ## Runtime and health endpoints
 
